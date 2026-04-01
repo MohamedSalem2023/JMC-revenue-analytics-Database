@@ -65,8 +65,15 @@ export default function App() {
     try {
       const response = await fetch('/api/data');
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || 'Failed to fetch data');
+        const text = await response.text();
+        let errorMessage = `Server error (${response.status})`;
+        try {
+          const errData = JSON.parse(text);
+          errorMessage = errData.error || errorMessage;
+        } catch (e) {
+          errorMessage += `: ${text.substring(0, 100)}`;
+        }
+        throw new Error(errorMessage);
       }
       const result = await response.json();
       
@@ -194,20 +201,16 @@ export default function App() {
     // Apply Filters
     if (filters.startDate) {
       const [year, month, day] = filters.startDate.split('-').map(Number);
-      // Create start date at local midnight
       const start = new Date(year, month - 1, day, 0, 0, 0, 0);
       data = data.filter(row => {
-        // Ensure row.date is treated as local midnight for comparison
         const rowDate = new Date(row.date.getFullYear(), row.date.getMonth(), row.date.getDate());
         return rowDate >= start;
       });
     }
     if (filters.endDate) {
       const [year, month, day] = filters.endDate.split('-').map(Number);
-      // Create end date at local 23:59:59.999
       const end = new Date(year, month - 1, day, 23, 59, 59, 999);
       data = data.filter(row => {
-        // Ensure row.date is treated as local midnight for comparison
         const rowDate = new Date(row.date.getFullYear(), row.date.getMonth(), row.date.getDate());
         return rowDate <= end;
       });
@@ -312,7 +315,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
-      {/* Sidebar Filters */}
       <div className="flex flex-col h-screen sticky top-0 bg-white border-r border-slate-200 w-80 z-20">
         <div className="flex-1 overflow-y-auto">
           <Filters
@@ -326,8 +328,6 @@ export default function App() {
             isAdmin={isAdmin}
           />
         </div>
-        
-        {/* Auth Section at bottom of sidebar */}
         <div className="p-4 border-t border-slate-100 bg-slate-50">
           {user ? (
             <div className="flex items-center justify-between">
@@ -360,9 +360,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Main Content */}
       <main className="flex-1 p-8 lg:p-12 overflow-y-auto custom-scrollbar">
-        {/* Header */}
         <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-12">
           <div>
             <div className="flex items-center gap-2 text-blue-600 font-bold text-sm uppercase tracking-widest mb-2">
@@ -383,7 +381,6 @@ export default function App() {
             <button
               onClick={handleRefresh}
               className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm"
-              title="Refresh Data"
             >
               <RefreshCw className="w-4 h-4" />
               Refresh
@@ -399,21 +396,18 @@ export default function App() {
             <button
               onClick={() => exportToExcel(processedData)}
               className="p-2.5 bg-white text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all"
-              title="Export to Excel"
             >
               <FileSpreadsheet className="w-5 h-5" />
             </button>
             <button
               onClick={() => exportToPDF(stats)}
               className="p-2.5 bg-white text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all"
-              title="Export to PDF"
             >
               <FileText className="w-5 h-5" />
             </button>
           </div>
         </header>
 
-        {/* --- REVENUE TAB --- */}
         {activeTab === "data" && (
           <DataManagement 
             rawData={rawData} 
@@ -424,7 +418,6 @@ export default function App() {
 
         {activeTab === "revenue" && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-12">
-            {/* KPI Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <KPICard
                 title="Total Revenue"
@@ -452,7 +445,6 @@ export default function App() {
               />
             </div>
 
-            {/* Revenue Breakdown Section */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                 <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
@@ -488,7 +480,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Charts Section 1: Trends & Insurance */}
             <div className="grid grid-cols-1 gap-12">
               <div className="h-[500px]">
                 <DashboardChart
@@ -512,7 +503,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Charts Section 2: Clinic & Doctor */}
             <div className="grid grid-cols-1 gap-12">
               <div className="h-[500px]">
                 <DashboardChart
@@ -539,7 +529,6 @@ export default function App() {
           </motion.div>
         )}
 
-        {/* --- VOLUME TAB --- */}
         {activeTab === "volume" && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-12">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -595,22 +584,9 @@ export default function App() {
                 />
               </div>
             </div>
-            
-            <div className="h-[500px]">
-              <DashboardChart
-                title="Volume by Doctor"
-                type="bar"
-                data={Object.entries(stats.volumeByDoctor)
-                  .map(([name, val]: [string, any]) => ({ name, b2b: val.b2b.size, b2c: val.b2c.size }))
-                  .sort((a, b) => (b.b2b + b.b2c) - (a.b2b + a.b2c))
-                  .slice(0, 15)}
-                dataKeys={["b2b", "b2c"]}
-              />
-            </div>
           </motion.div>
         )}
 
-        {/* --- CPP TAB --- */}
         {activeTab === "cpp" && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-12">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -655,58 +631,10 @@ export default function App() {
                 />
               </div>
             </div>
-
-            {/* Exact Numbers Cards */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Clinic CPP Details */}
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-                <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-                  <Building2 className="w-5 h-5 text-blue-600" />
-                  Detailed CPP by Clinic
-                </h3>
-                <div className="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
-                  {cppByClinic.map((c, i) => (
-                    <div key={c.name} className="flex justify-between items-center p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm font-bold text-slate-400 w-5">{i + 1}.</span>
-                        <div>
-                          <p className="font-semibold text-slate-800">{c.name}</p>
-                          <p className="text-xs text-slate-500">Vol: {c.volume} | Rev: SAR {c.revenue.toLocaleString()}</p>
-                        </div>
-                      </div>
-                      <span className="font-black text-lg text-purple-600">SAR {c.cpp}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Doctor CPP Details */}
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-                <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-                  <Stethoscope className="w-5 h-5 text-blue-600" />
-                  Detailed CPP by Doctor
-                </h3>
-                <div className="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
-                  {cppByDoctor.map((c, i) => (
-                    <div key={c.name} className="flex justify-between items-center p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm font-bold text-slate-400 w-5">{i + 1}.</span>
-                        <div>
-                          <p className="font-semibold text-slate-800">{c.name}</p>
-                          <p className="text-xs text-slate-500">Vol: {c.volume} | Rev: SAR {c.revenue.toLocaleString()}</p>
-                        </div>
-                      </div>
-                      <span className="font-black text-lg text-purple-600">SAR {c.cpp}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
           </motion.div>
         )}
       </main>
 
-      {/* Presentation Mode Overlay */}
       <AnimatePresence>
         {isPresentationMode && (
           <PresentationMode
