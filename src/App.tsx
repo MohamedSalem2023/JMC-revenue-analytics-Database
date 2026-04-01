@@ -63,7 +63,9 @@ export default function App() {
   const loadData = async () => {
     setIsLoadingData(true);
     try {
+      // محاولة جلب البيانات من السيرفر
       const response = await fetch('/api/data');
+      
       if (!response.ok) {
         const text = await response.text();
         let errorMessage = `Server error (${response.status})`;
@@ -75,6 +77,7 @@ export default function App() {
         }
         throw new Error(errorMessage);
       }
+      
       const result = await response.json();
       
       if (result.data && result.data.length > 0) {
@@ -84,6 +87,7 @@ export default function App() {
       }
     } catch (error: any) {
       console.error("Failed to load data from MongoDB", error);
+      // إظهار رسالة الخطأ بالتفصيل للمستخدم
       alert("Error loading data from database: " + error.message);
     } finally {
       setIsLoadingData(false);
@@ -102,7 +106,7 @@ export default function App() {
 
     try {
       if (onProgress) onProgress("Merging new data with existing records...");
-      // Merge logic: replace existing data for the dates present in the new sheet
+      
       const newDates = new Set<string>();
       for (let i = 0; i < newData.length; i++) {
         const d = parseExcelDate(newData[i].Date);
@@ -123,7 +127,6 @@ export default function App() {
 
       const mergedData = [...filteredExistingData, ...newData];
       
-      // Save to MongoDB in chunks to avoid payload limits
       const CHUNK_SIZE = 5000;
       const chunks = [];
       for (let i = 0; i < mergedData.length; i += CHUNK_SIZE) {
@@ -155,7 +158,6 @@ export default function App() {
       }
 
       if (onProgress) onProgress("Finalizing upload...");
-
       setRawData(mergedData);
     } catch (error) {
       console.error("Error saving to MongoDB", error);
@@ -169,6 +171,8 @@ export default function App() {
       alert("Only the administrator can clear data.");
       return;
     }
+    if (!window.confirm("Are you sure you want to clear ALL data from the database?")) return;
+    
     try {
       const response = await fetch('/api/data/clear', {
         method: 'DELETE',
@@ -198,7 +202,6 @@ export default function App() {
     if (!baseProcessedData || baseProcessedData.length === 0) return [];
     let data = baseProcessedData;
 
-    // Apply Filters
     if (filters.startDate) {
       const [year, month, day] = filters.startDate.split('-').map(Number);
       const start = new Date(year, month - 1, day, 0, 0, 0, 0);
@@ -328,6 +331,7 @@ export default function App() {
             isAdmin={isAdmin}
           />
         </div>
+        
         <div className="p-4 border-t border-slate-100 bg-slate-50">
           {user ? (
             <div className="flex items-center justify-between">
@@ -381,6 +385,7 @@ export default function App() {
             <button
               onClick={handleRefresh}
               className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm"
+              title="Refresh Data"
             >
               <RefreshCw className="w-4 h-4" />
               Refresh
@@ -396,12 +401,14 @@ export default function App() {
             <button
               onClick={() => exportToExcel(processedData)}
               className="p-2.5 bg-white text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all"
+              title="Export to Excel"
             >
               <FileSpreadsheet className="w-5 h-5" />
             </button>
             <button
               onClick={() => exportToPDF(stats)}
               className="p-2.5 bg-white text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all"
+              title="Export to PDF"
             >
               <FileText className="w-5 h-5" />
             </button>
