@@ -83,21 +83,29 @@ app.get("/api/data", async (req, res) => {
     const database = await getDb();
     const collection = database.collection("revenue_chunks");
     
-    // Create an index on the 'index' field to avoid in-memory sorting
-    await collection.createIndex({ index: 1 });
-    
+    console.log("Fetching data from MongoDB...");
     // Use allowDiskUse to prevent memory limit errors when sorting large datasets
-    const chunks = await collection.find({}, { allowDiskUse: true }).sort({ index: 1 }).toArray();
+    const chunks = await collection.find({}).sort({ index: 1 }).allowDiskUse().toArray();
     
+    console.log(`Found ${chunks.length} chunks in database.`);
+
     if (chunks.length === 0) {
+      console.log("No data found in revenue_chunks collection.");
       return res.json({ data: null });
     }
 
     // Reassemble chunks
     const allData = chunks.reduce((acc: any[], chunk: any) => {
-      return acc.concat(JSON.parse(chunk.data));
+      try {
+        const parsed = typeof chunk.data === 'string' ? JSON.parse(chunk.data) : chunk.data;
+        return acc.concat(parsed);
+      } catch (e) {
+        console.error("Error parsing chunk data at index", chunk.index, ":", e);
+        return acc;
+      }
     }, []);
 
+    console.log(`Successfully reassembled ${allData.length} rows.`);
     res.json({ data: allData });
   } catch (error) {
     console.error("Error fetching data:", error);
