@@ -10,9 +10,10 @@ const app = express();
 const PORT = parseInt(process.env.PORT || "3000", 10);
 
 app.use(cors());
-app.use(express.json({ limit: '500mb' }));
+app.use(express.json({ limit: '500mb' })); // زيادة الحد لاستيعاب البيانات الكبيرة
 app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
+// استخدام متغير البيئة مباشرة
 let uri = process.env.MONGODB_URI;
 
 if (!uri) {
@@ -20,7 +21,7 @@ if (!uri) {
   process.exit(1);
 }
 
-// تنظيف الرابط من أي رموز زائدة
+// تنظيف الرابط من الرموز الزائدة < و > التي قد يتركها المستخدم بالخطأ
 if (uri.includes("<") || uri.includes(">")) {
   console.log("Cleaning MONGODB_URI: removing < and > symbols.");
   uri = uri.replace(/<|>/g, "");
@@ -32,7 +33,7 @@ let db: any;
 async function getDb() {
   console.log("getDb called. Current client state:", client ? "initialized" : "null");
   if (!client) {
-    console.log("Initializing MongoClient...");
+    console.log("Initializing MongoClient with URI...");
     client = new MongoClient(uri as string, {
       serverApi: {
         version: ServerApiVersion.v1,
@@ -45,16 +46,23 @@ async function getDb() {
   }
   
   try {
-    console.log("Pinging MongoDB...");
+    console.log("Pinging MongoDB admin database...");
     await client.db("admin").command({ ping: 1 });
-    console.log("Ping successful.");
+    console.log("Ping successful. Accessing JMSRevenueAnalysis database...");
     db = client.db("JMSRevenueAnalysis");
     return db;
   } catch (error: any) {
-    console.error("MongoDB connection error:", error.message);
-    // محاولة إعادة الاتصال في حال الفشل
+    console.error("MongoDB connection/ping error details:");
+    console.error("- Message:", error.message);
+    console.error("- Code:", error.code);
+    
+    console.log("Attempting to recreate MongoClient due to error...");
     client = new MongoClient(uri as string, {
-      serverApi: { version: ServerApiVersion.v1, strict: true, deprecationErrors: true },
+      serverApi: {
+        version: ServerApiVersion.v1,
+        strict: true,
+        deprecationErrors: true,
+      },
       connectTimeoutMS: 10000,
       socketTimeoutMS: 45000,
     });
@@ -73,77 +81,108 @@ async function connectToMongo() {
 }
 
 // API Routes
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok" });
+});
+
 app.get("/api/data", async (req, res) => {
   try {
     const database = await getDb();
     const collection = database.collection("revenue_chunks");
     
-    console.log("Fetching data...");
+    console.log("Fetching data from MongoDB...");
+    // استخدام allowDiskUse لتجنب أخطاء الذاكرة عند فرز البيانات الكبيرة
     const chunks = await collection.find({}).sort({ index: 1 }).allowDiskUse().toArray();
     
+    console.log(`Found ${chunks.length} chunks in database.`);
+
     if (chunks.length === 0) {
+      console.log("No data found in revenue_chunks collection.");
       return res.json({ data: null });
     }
 
+    // إعادة تجميع الأجزاء (Chunks)
     const allData = chunks.reduce((acc: any[], chunk: any) => {
       try {
         const parsed = typeof chunk.data === 'string' ? JSON.parse(chunk.data) : chunk.data;
         return acc.concat(parsed);
       } catch (e) {
+        console.error("Error parsing chunk data at index", chunk.index, ":", e);
         return acc;
       }
     }, []);
 
+    console.log(`Successfully reassembled ${allData.length} rows.`);
     res.json({ data: allData });
   } catch (error: any) {
     console.error("Error fetching data:", error);
-    res.status(500).json({ error: error.message || "Internal Server Error" });
+    res.status(500).json({ error: error.message || "Failed to fetch data" });
   }
 });
 
-// باقي الـ APIs (Upload, Clear, etc.) تبقى كما هي...
-app.post("/api/data/upload", async (req, res) => {
+app.post("/api/data/upload-chunk", async (req, res) => {
   try {
-    const { chunks } = req.body;
+    const { chunk, index } = req.body;
+    
+    if (!chunk || !Array.isArray(chunk)) {
+      return res.status(400).json({ error: "Invalid chunk data" });
+    }
+
     const database = await getDb();
     const collection = database.collection("revenue_chunks");
-    await collection.deleteMany({});
-    if (chunks.length > 0) {
-      await collection.insertMany(chunks.map((chunk, index) => ({
-        index, data: JSON.stringify(chunk), timestamp: new Date()
-      })));
-    }
-    res.json({ success: true });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    
+    await collection.insertOne({
+      index,
+      data: JSON.stringify(chunk),
+      timestamp: new Date()
+    });
+
+    res.json({ success: true, message: `Chunk ${index} uploaded successfully` });
+  } catch (error) {
+    console.error("Error uploading chunk:", error);
+    res.status(500).json({ error: "Failed to upload chunk" });
   }
 });
 
 app.delete("/api/data/clear", async (req, res) => {
   try {
     const database = await getDb();
-    await database.collection("revenue_chunks").deleteMany({});
-    res.json({ success: true });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    const collection = database.collection("revenue_chunks");
+    await collection.deleteMany({});
+    res.json({ success: true, message: "Data cleared successfully" });
+  } catch (error) {
+    console.error("Error clearing data:", error);
+    res.status(500).json({ error: "Failed to clear data" });
   }
 });
 
 async function startServer() {
   await connectToMongo();
 
-  if (process.env.NODE_ENV === "production") {
+  // Vite middleware for development
+  if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
-  } else {
-    const { createServer: createViteServer } = await import("vite");
-    const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
-    app.use(vite.middlewares);
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
   }
 
+  // معالج أخطاء عالمي لضمان استجابات JSON
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error("Unhandled error:", err);
+    res.status(err.status || 500).json({ error: err.message || "Internal Server Error" });
+  });
+
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`Server running on http://localhost:${PORT}`);
   });
 }
 
