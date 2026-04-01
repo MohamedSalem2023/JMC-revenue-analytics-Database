@@ -64,7 +64,10 @@ export default function App() {
     setIsLoadingData(true);
     try {
       const response = await fetch('/api/data');
-      if (!response.ok) throw new Error('Failed to fetch data');
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to fetch data');
+      }
       const result = await response.json();
       
       if (result.data && result.data.length > 0) {
@@ -72,8 +75,9 @@ export default function App() {
       } else {
         setRawData(null);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to load data from MongoDB", error);
+      alert("Error loading data from database: " + error.message);
     } finally {
       setIsLoadingData(false);
     }
