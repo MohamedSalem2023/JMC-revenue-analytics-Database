@@ -1,0 +1,39 @@
+{
+  "entities": {
+    "DataChunk": {
+      "title": "DataChunk",
+      "description": "A chunk of raw data rows to bypass the 1MB document limit.",
+      "type": "object",
+      "properties": {
+        "chunkIndex": { "type": "number", "description": "The index of the chunk" },
+        "rows": {
+          "type": "array",
+          "description": "Array of raw data rows serialized as JSON strings to save space and avoid complex nested arrays.",
+          "items": { "type": "string" }
+        },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["chunkIndex", "rows", "updatedAt"]
+    },
+    "Metadata": {
+      "title": "Metadata",
+      "description": "Metadata about the uploaded data.",
+      "type": "object",
+      "properties": {
+        "totalRecords": { "type": "number" },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      },
+      "required": ["totalRecords", "lastUpdated"]
+    }
+  },
+  "firestore": {
+    "revenue_chunks/{chunkId}": {
+      "schema": { "$ref": "#/entities/DataChunk" },
+      "description": "Chunks of revenue data."
+    },
+    "system/metadata": {
+      "schema": { "$ref": "#/entities/Metadata" },
+      "description": "System metadata."
+    }
+  }
+}
