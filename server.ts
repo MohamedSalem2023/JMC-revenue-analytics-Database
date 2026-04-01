@@ -10,98 +10,82 @@ const app = express();
 const PORT = parseInt(process.env.PORT || "3000", 10);
 
 app.use(cors());
-app.use(express.json({ limit: '500mb' })); 
-app.use(express.urlencoded({ limit: '500mb', extended: true }));
+// تقليل الحد قليلاً لضمان استقرار السيرفر
+app.use(express.json({ limit: '100mb' })); 
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 let uri = process.env.MONGODB_URI;
 
 if (!uri) {
-  console.error("MONGODB_URI is not set.");
+  console.error("MONGODB_URI is missing!");
   process.exit(1);
 }
 
-if (uri.includes("<") || uri.includes(">")) {
-  uri = uri.replace(/<|>/g, "");
-}
+// تنظيف الرابط
+uri = uri.replace(/<|>/g, "");
 
-let client: MongoClient;
-let db: any;
+let client: MongoClient | null = null;
 
 async function getDb() {
   if (!client) {
     client = new MongoClient(uri as string, {
       serverApi: { version: ServerApiVersion.v1, strict: true, deprecationErrors: true },
-      connectTimeoutMS: 10000,
-      socketTimeoutMS: 45000,
+      maxPoolSize: 10, // تحديد عدد الاتصالات لتوفير الذاكرة
     });
+    await client.connect();
   }
-  
-  try {
-    await client.db("admin").command({ ping: 1 });
-    db = client.db("JMSRevenueAnalysis");
-    return db;
-  } catch (error: any) {
-    client = new MongoClient(uri as string, {
-      serverApi: { version: ServerApiVersion.v1, strict: true, deprecationErrors: true },
-    });
-    db = client.db("JMSRevenueAnalysis");
-    return db;
-  }
+  return client.db("JMSRevenueAnalysis");
 }
 
-async function connectToMongo() {
-  try {
-    await getDb();
-    console.log("Successfully connected to MongoDB!");
-  } catch (error) {
-    console.error("Error connecting to MongoDB:", error);
-  }
-}
-
-// API جلب البيانات - تم التعديل هنا لحل مشكلة الذاكرة
+// API جلب البيانات - نسخة "خفيفة الوزن"
 app.get("/api/data", async (req, res) => {
   try {
     const database = await getDb();
     const collection = database.collection("revenue_chunks");
     
-    console.log("Fetching data from MongoDB...");
+    console.log("Fetching data...");
     
-    // الحل: جلب البيانات بدون ترتيب من المونجو لتجنب خطأ الذاكرة
-    const chunks = await collection.find({}).toArray();
+    // جلب البيانات فقط، بدون ترتيب معقد في البداية
+    const cursor = collection.find({});
+    const allData: any[] = [];
     
-    console.log(`Found ${chunks.length} chunks. Sorting in server memory...`);
-
-    if (chunks.length === 0) {
-      return res.json({ data: null });
-    }
-
-    // ترتيب البيانات داخل السيرفر (هذا لا يستهلك ذاكرة المونجو المحدودة)
-    chunks.sort((a: any, b: any) => (a.index || 0) - (b.index || 0));
-
-    // إعادة تجميع الأجزاء
-    const allData = chunks.reduce((acc: any[], chunk: any) => {
+    await cursor.forEach((chunk: any) => {
       try {
         const parsed = typeof chunk.data === 'string' ? JSON.parse(chunk.data) : chunk.data;
-        return acc.concat(parsed);
+        if (Array.isArray(parsed)) {
+          allData.push(...parsed);
+        }
       } catch (e) {
-        return acc;
+        console.error("Parse error in chunk");
       }
-    }, []);
+    });
 
-    console.log(`Successfully reassembled ${allData.length} rows.`);
-    res.json({ data: allData });
+    console.log(`Total rows reassembled: ${allData.length}`);
+    res.json({ data: allData.length > 0 ? allData : null });
   } catch (error: any) {
-    console.error("Error fetching data:", error);
-    res.status(500).json({ error: error.message || "Failed to fetch data" });
+    console.error("Fetch error:", error.message);
+    res.status(500).json({ error: "Database connection failed. Please try again." });
   }
 });
 
+// API رفع البيانات - مع تنظيف تلقائي
 app.post("/api/data/upload-chunk", async (req, res) => {
   try {
     const { chunk, index } = req.body;
     const database = await getDb();
     const collection = database.collection("revenue_chunks");
-    await collection.insertOne({ index, data: JSON.stringify(chunk), timestamp: new Date() });
+    
+    // إذا كان هذا هو الجزء الأول، نمسح كل القديم فوراً لتوفير مساحة
+    if (index === 0) {
+      await collection.deleteMany({});
+    }
+
+    await collection.insertOne({ 
+      index, 
+      data: JSON.stringify(chunk), 
+      timestamp: new Date() 
+    });
+    
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -119,7 +103,12 @@ app.delete("/api/data/clear", async (req, res) => {
 });
 
 async function startServer() {
-  await connectToMongo();
+  try {
+    await getDb();
+    console.log("Connected to MongoDB");
+  } catch (e) {
+    console.error("Initial connection failed");
+  }
 
   if (process.env.NODE_ENV === "production") {
     const distPath = path.join(process.cwd(), 'dist');
@@ -132,7 +121,7 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server ready on port ${PORT}`);
   });
 }
 
