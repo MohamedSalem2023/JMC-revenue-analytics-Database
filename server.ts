@@ -1,119 +1,150 @@
 import express from "express";
-import path from "path";
-import { MongoClient } from "mongodb";
+import { MongoClient, ServerApiVersion } from "mongodb";
+import cors from "cors";
 import dotenv from "dotenv";
+import path from "path";
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = parseInt(process.env.PORT || "3000", 10);
 
-// تنظيف رابط MongoDB من أي رموز زائدة
-const MONGODB_URI = process.env.MONGODB_URI?.replace('<', '').replace('>', '') || "mongodb://localhost:27017";
+app.use(cors());
+app.use(express.json({ limit: '500mb' }));
+app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
-let dbClient: MongoClient | null = null;
+let uri = process.env.MONGODB_URI;
+
+if (!uri) {
+  console.error("MONGODB_URI environment variable is not set.");
+  process.exit(1);
+}
+
+// تنظيف الرابط من أي رموز زائدة
+if (uri.includes("<") || uri.includes(">")) {
+  console.log("Cleaning MONGODB_URI: removing < and > symbols.");
+  uri = uri.replace(/<|>/g, "");
+}
+
+let client: MongoClient;
+let db: any;
 
 async function getDb() {
-  if (!dbClient) {
-    dbClient = new MongoClient(MONGODB_URI, {
+  console.log("getDb called. Current client state:", client ? "initialized" : "null");
+  if (!client) {
+    console.log("Initializing MongoClient...");
+    client = new MongoClient(uri as string, {
+      serverApi: {
+        version: ServerApiVersion.v1,
+        strict: true,
+        deprecationErrors: true,
+      },
       connectTimeoutMS: 10000,
       socketTimeoutMS: 45000,
     });
-    await dbClient.connect();
-    console.log("Successfully connected to MongoDB!");
   }
-  return dbClient.db("JMSRevenueAnalysis");
+  
+  try {
+    console.log("Pinging MongoDB...");
+    await client.db("admin").command({ ping: 1 });
+    console.log("Ping successful.");
+    db = client.db("JMSRevenueAnalysis");
+    return db;
+  } catch (error: any) {
+    console.error("MongoDB connection error:", error.message);
+    // محاولة إعادة الاتصال في حال الفشل
+    client = new MongoClient(uri as string, {
+      serverApi: { version: ServerApiVersion.v1, strict: true, deprecationErrors: true },
+      connectTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+    });
+    db = client.db("JMSRevenueAnalysis");
+    return db;
+  }
 }
 
-app.use(express.json({ limit: "50mb" }));
+async function connectToMongo() {
+  try {
+    await getDb();
+    console.log("Successfully connected to MongoDB!");
+  } catch (error) {
+    console.error("Error connecting to MongoDB on startup:", error);
+  }
+}
 
-// API لجلب البيانات
+// API Routes
 app.get("/api/data", async (req, res) => {
   try {
-    const db = await getDb();
-    const collection = db.collection("revenue_data");
+    const database = await getDb();
+    const collection = database.collection("revenue_chunks");
     
-    console.log("Fetching data from MongoDB...");
-    const chunks = await collection.find({}).sort({ index: 1 }).toArray();
+    console.log("Fetching data...");
+    const chunks = await collection.find({}).sort({ index: 1 }).allowDiskUse().toArray();
     
     if (chunks.length === 0) {
-      console.log("No data found in database.");
-      return res.json({ data: [] });
+      return res.json({ data: null });
     }
 
-    console.log(`Found ${chunks.length} chunks. Reassembling...`);
-    
     const allData = chunks.reduce((acc: any[], chunk: any) => {
       try {
         const parsed = typeof chunk.data === 'string' ? JSON.parse(chunk.data) : chunk.data;
-        return [...acc, ...parsed];
+        return acc.concat(parsed);
       } catch (e) {
-        console.error("Error parsing chunk:", e);
         return acc;
       }
     }, []);
 
-    console.log(`Successfully reassembled ${allData.length} rows.`);
     res.json({ data: allData });
   } catch (error: any) {
     console.error("Error fetching data:", error);
-    // نرسل رسالة الخطأ الحقيقية للمتصفح لنعرف السبب
-    res.status(500).json({ error: error.message || "Failed to fetch data" });
+    res.status(500).json({ error: error.message || "Internal Server Error" });
   }
 });
 
-// API لحفظ البيانات (Chunks)
-app.post("/api/data", async (req, res) => {
+// باقي الـ APIs (Upload, Clear, etc.) تبقى كما هي...
+app.post("/api/data/upload", async (req, res) => {
   try {
     const { chunks } = req.body;
-    if (!Array.isArray(chunks)) {
-      return res.status(400).json({ error: "Invalid data format" });
-    }
-
-    const db = await getDb();
-    const collection = db.collection("revenue_data");
-
+    const database = await getDb();
+    const collection = database.collection("revenue_chunks");
     await collection.deleteMany({});
-    await collection.insertMany(chunks.map((data, index) => ({ data, index, timestamp: new Date() })));
-
+    if (chunks.length > 0) {
+      await collection.insertMany(chunks.map((chunk, index) => ({
+        index, data: JSON.stringify(chunk), timestamp: new Date()
+      })));
+    }
     res.json({ success: true });
   } catch (error: any) {
-    console.error("Error saving data:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// API لمسح البيانات
-app.delete("/api/data", async (req, res) => {
+app.delete("/api/data/clear", async (req, res) => {
   try {
-    const db = await getDb();
-    await db.collection("revenue_data").deleteMany({});
+    const database = await getDb();
+    await database.collection("revenue_chunks").deleteMany({});
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// إعداد Vite للمنتج (Production)
-if (process.env.NODE_ENV === "production") {
-  const distPath = path.join(process.cwd(), "dist");
-  app.use(express.static(distPath));
-  app.get("*", (req, res) => {
-    res.sendFile(path.join(distPath, "index.html"));
-  });
-} else {
-  // تحميل Vite ديناميكياً فقط في التطوير لتوفير الذاكرة
-  const startVite = async () => {
+async function startServer() {
+  await connectToMongo();
+
+  if (process.env.NODE_ENV === "production") {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
+  } else {
     const { createServer: createViteServer } = await import("vite");
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
+    const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
     app.use(vite.middlewares);
-  };
-  startVite();
+  }
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on port ${PORT}`);
+  });
 }
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+startServer();
