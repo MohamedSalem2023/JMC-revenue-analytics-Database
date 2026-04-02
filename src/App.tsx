@@ -39,7 +39,7 @@ export default function App() {
   const [rawData, setRawData] = useState<RawDataRow[] | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isPresentationMode, setIsPresentationMode] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // حالة القائمة الجانبية للموبايل
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"revenue" | "volume" | "cpp" | "data">("revenue");
   const [user, setUser] = useState<User | null>(null);
   
@@ -65,7 +65,6 @@ export default function App() {
     setIsLoadingData(true);
     try {
       const response = await fetch('/api/data');
-      
       if (!response.ok) {
         const text = await response.text();
         let errorMessage = `Server error (${response.status})`;
@@ -77,7 +76,6 @@ export default function App() {
         }
         throw new Error(errorMessage);
       }
-      
       const result = await response.json();
       
       if (result.data && result.data.length > 0) {
@@ -105,7 +103,7 @@ export default function App() {
 
     try {
       if (onProgress) onProgress("Merging new data with existing records...");
-      
+      // Merge logic: replace existing data for the dates present in the new sheet
       const newDates = new Set<string>();
       for (let i = 0; i < newData.length; i++) {
         const d = parseExcelDate(newData[i].Date);
@@ -126,6 +124,7 @@ export default function App() {
 
       const mergedData = [...filteredExistingData, ...newData];
       
+      // Save to MongoDB in chunks to avoid payload limits
       const CHUNK_SIZE = 5000;
       const chunks = [];
       for (let i = 0; i < mergedData.length; i += CHUNK_SIZE) {
@@ -157,6 +156,7 @@ export default function App() {
       }
 
       if (onProgress) onProgress("Finalizing upload...");
+
       setRawData(mergedData);
     } catch (error) {
       console.error("Error saving to MongoDB", error);
@@ -170,8 +170,6 @@ export default function App() {
       alert("Only the administrator can clear data.");
       return;
     }
-    if (!window.confirm("Are you sure you want to clear ALL data from the database?")) return;
-    
     try {
       const response = await fetch('/api/data/clear', {
         method: 'DELETE',
@@ -201,18 +199,23 @@ export default function App() {
     if (!baseProcessedData || baseProcessedData.length === 0) return [];
     let data = baseProcessedData;
 
+    // Apply Filters
     if (filters.startDate) {
       const [year, month, day] = filters.startDate.split('-').map(Number);
+      // Create start date at local midnight
       const start = new Date(year, month - 1, day, 0, 0, 0, 0);
       data = data.filter(row => {
+        // Ensure row.date is treated as local midnight for comparison
         const rowDate = new Date(row.date.getFullYear(), row.date.getMonth(), row.date.getDate());
         return rowDate >= start;
       });
     }
     if (filters.endDate) {
       const [year, month, day] = filters.endDate.split('-').map(Number);
+      // Create end date at local 23:59:59.999
       const end = new Date(year, month - 1, day, 23, 59, 59, 999);
       data = data.filter(row => {
+        // Ensure row.date is treated as local midnight for comparison
         const rowDate = new Date(row.date.getFullYear(), row.date.getMonth(), row.date.getDate());
         return rowDate <= end;
       });
@@ -268,42 +271,42 @@ export default function App() {
 
   if (isLoadingData) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 md:p-6">
-        <Loader2 className="w-10 h-10 md:w-12 md:h-12 text-blue-600 animate-spin mb-4" />
-        <p className="text-slate-500 font-medium text-sm md:text-base">Loading your database...</p>
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
+        <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
+        <p className="text-slate-500 font-medium">Loading your database...</p>
       </div>
     );
   }
 
   if (!rawData) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 md:p-6">
-        <div className="text-center mb-8 md:mb-12">
-          <div className="flex flex-col items-center justify-center mb-6 md:mb-8">
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
+        <div className="text-center mb-12">
+          <div className="flex flex-col items-center justify-center mb-8">
             <img 
               src="https://scontent.fdmm3-2.fna.fbcdn.net/v/t39.30808-6/450998298_1150415529461259_130598404335151586_n.jpg?_nc_cat=107&ccb=1-7&_nc_sid=1d70fc&_nc_ohc=LcOecER7Vb8Q7kNvwErsy3r&_nc_oc=Adruk9JnfgD1599db-aJMpbyCJdUsG2mznfW5aVdtusbLgTY2GPP_WIcIv72ta6DEADZYmkY3yAE63Brkm_x_qcj&_nc_zt=23&_nc_ht=scontent.fdmm3-2.fna&_nc_gid=2SF07jAdE6bjLjJFwgUb4g&_nc_ss=7a3a8&oh=00_AfyJpTLVbaYQ1MK8C1itpP9WmWPoHkCGJgXUhf4eDPavZA&oe=69D18B30" 
               alt="مركز طوارئيات للعناية الطبية - الجبيل" 
-              className="w-24 h-24 md:w-32 md:h-32 object-contain rounded-2xl shadow-lg mb-4"
+              className="w-32 h-32 object-contain rounded-2xl shadow-lg mb-4"
               referrerPolicy="no-referrer"
             />
-            <h2 className="text-xl md:text-2xl font-bold text-slate-800 text-center px-4">مركز طوارئيات للعناية الطبية - الجبيل</h2>
+            <h2 className="text-2xl font-bold text-slate-800">مركز طوارئيات للعناية الطبية - الجبيل</h2>
           </div>
-          <h1 className="text-3xl md:text-4xl font-black text-slate-900 mb-4 tracking-tight">Revenue Analytics</h1>
-          <p className="text-slate-500 max-w-md mx-auto text-base md:text-lg px-4">
+          <h1 className="text-4xl font-black text-slate-900 mb-4 tracking-tight">Revenue Analytics</h1>
+          <p className="text-slate-500 max-w-md mx-auto text-lg">
             Transform your healthcare data into executive-level insights. Upload your master data sheet to begin.
           </p>
         </div>
-        <div className="mt-4 md:mt-8 w-full max-w-2xl mx-auto px-4">
+        <div className="mt-12 w-full max-w-2xl mx-auto">
           {isAdmin ? (
             <FileUpload onDataLoaded={handleDataLoaded} />
           ) : (
-            <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 text-center">
-              <Database className="w-10 h-10 md:w-12 md:h-12 text-slate-300 mx-auto mb-4" />
-              <h3 className="text-lg md:text-xl font-bold text-slate-800 mb-2">No Data Available</h3>
-              <p className="text-sm md:text-base text-slate-500 mb-6">The database is currently empty. The administrator needs to upload the initial data.</p>
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100 text-center">
+              <Database className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-slate-800 mb-2">No Data Available</h3>
+              <p className="text-slate-500 mb-6">The database is currently empty. The administrator needs to upload the initial data.</p>
               <button 
                 onClick={signInWithGoogle}
-                className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-xl font-semibold hover:bg-slate-800 transition-all w-full sm:w-auto"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-xl font-semibold hover:bg-slate-800 transition-all"
               >
                 <LogIn className="w-5 h-5" />
                 Admin Login
@@ -316,27 +319,26 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex overflow-hidden relative">
-      
-      {/* Mobile Overlay */}
-      {isSidebarOpen && (
+    <div className="min-h-screen bg-slate-50 flex">
+      {/* Mobile Menu Overlay */}
+      {isMobileMenuOpen && (
         <div 
-          className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden backdrop-blur-sm"
-          onClick={() => setIsSidebarOpen(false)}
+          className="fixed inset-0 bg-slate-900/50 z-30 lg:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar Filters */}
       <div className={cn(
-        "fixed inset-y-0 left-0 z-50 w-[280px] sm:w-80 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:h-screen flex flex-col shadow-2xl lg:shadow-none",
-        isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+        "fixed lg:sticky top-0 left-0 h-screen bg-white border-r border-slate-200 w-80 z-40 transform transition-transform duration-300 ease-in-out flex flex-col",
+        isMobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}>
-        {/* Mobile Sidebar Header */}
-        <div className="flex items-center justify-between p-4 lg:hidden border-b border-slate-100">
-          <span className="font-bold text-slate-800">Menu & Filters</span>
+        {/* Mobile Close Button */}
+        <div className="lg:hidden p-4 border-b border-slate-100 flex justify-between items-center">
+          <h2 className="font-bold text-slate-800">Menu & Filters</h2>
           <button 
-            onClick={() => setIsSidebarOpen(false)} 
-            className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg"
           >
             <X className="w-5 h-5" />
           </button>
@@ -352,12 +354,13 @@ export default function App() {
             activeTab={activeTab}
             setActiveTab={(tab) => {
               setActiveTab(tab);
-              setIsSidebarOpen(false); // إغلاق القائمة عند اختيار تبويب في الموبايل
+              setIsMobileMenuOpen(false); // Close menu on mobile when tab changes
             }}
             isAdmin={isAdmin}
           />
         </div>
         
+        {/* Auth Section at bottom of sidebar */}
         <div className="p-4 border-t border-slate-100 bg-slate-50">
           {user ? (
             <div className="flex items-center justify-between">
@@ -372,7 +375,7 @@ export default function App() {
               </div>
               <button 
                 onClick={logout}
-                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
+                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                 title="Logout"
               >
                 <LogOut className="w-4 h-4" />
@@ -391,47 +394,49 @@ export default function App() {
       </div>
 
       {/* Main Content */}
-      <main className="flex-1 p-4 sm:p-6 lg:p-12 h-screen overflow-y-auto custom-scrollbar w-full">
-        <header className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 xl:gap-6 mb-8 lg:mb-12">
-          <div className="flex items-start gap-3 sm:gap-4">
+      <main className="flex-1 p-4 lg:p-12 overflow-y-auto custom-scrollbar w-full">
+        {/* Header */}
+        <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8 lg:mb-12">
+          <div className="flex items-start gap-4">
             <button 
-              onClick={() => setIsSidebarOpen(true)}
-              className="lg:hidden p-2 mt-1 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 shadow-sm flex-shrink-0"
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="lg:hidden mt-1 p-2 text-slate-600 hover:bg-slate-200 rounded-lg bg-white shadow-sm border border-slate-200 shrink-0"
             >
               <Menu className="w-6 h-6" />
             </button>
             <div>
-              <div className="flex items-center gap-2 text-blue-600 font-bold text-xs sm:text-sm uppercase tracking-widest mb-1 sm:mb-2">
-                {activeTab === "revenue" && <><TrendingUp className="w-3 h-3 sm:w-4 sm:h-4" /> Executive Dashboard</>}
-                {activeTab === "volume" && <><Users className="w-3 h-3 sm:w-4 sm:h-4" /> Volume Dashboard</>}
-                {activeTab === "cpp" && <><PieChartIcon className="w-3 h-3 sm:w-4 sm:h-4" /> CPP Dashboard</>}
-                {activeTab === "data" && <><Database className="w-3 h-3 sm:w-4 sm:h-4" /> Data Management</>}
+              <div className="flex items-center gap-2 text-blue-600 font-bold text-sm uppercase tracking-widest mb-2">
+                {activeTab === "revenue" && <><TrendingUp className="w-4 h-4" /> Executive Dashboard</>}
+                {activeTab === "volume" && <><Users className="w-4 h-4" /> Volume Dashboard</>}
+                {activeTab === "cpp" && <><PieChartIcon className="w-4 h-4" /> CPP Dashboard</>}
+                {activeTab === "data" && <><Database className="w-4 h-4" /> Data Management</>}
               </div>
-              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+              <h1 className="text-2xl lg:text-3xl font-black text-slate-900 tracking-tight">
                 {activeTab === "revenue" && "Revenue Performance"}
                 {activeTab === "volume" && "Volume Analysis"}
-                {activeTab === "cpp" && "Cost Per Patient (CPP)"}
+                {activeTab === "cpp" && "Cost Per Patient (CPP) Analysis"}
                 {activeTab === "data" && "Database & Uploads"}
               </h1>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-3">
             <button
               onClick={handleRefresh}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm text-sm sm:text-base"
+              className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm"
+              title="Refresh Data"
             >
               <RefreshCw className="w-4 h-4" />
-              <span className="hidden sm:inline">Refresh</span>
+              Refresh
             </button>
             <button
               onClick={() => setIsPresentationMode(true)}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 text-white rounded-xl font-semibold hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 text-sm sm:text-base"
+              className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-xl font-semibold hover:bg-slate-800 transition-all shadow-lg shadow-slate-200"
             >
               <Maximize2 className="w-4 h-4" />
-              <span className="hidden sm:inline">Presentation</span>
+              Presentation Mode
             </button>
-            <div className="hidden sm:block h-10 w-px bg-slate-200 mx-1" />
+            <div className="h-10 w-px bg-slate-200 mx-2" />
             <button
               onClick={() => exportToExcel(processedData)}
               className="p-2.5 bg-white text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all"
@@ -449,6 +454,7 @@ export default function App() {
           </div>
         </header>
 
+        {/* --- REVENUE TAB --- */}
         {activeTab === "data" && (
           <DataManagement 
             rawData={rawData} 
@@ -458,8 +464,9 @@ export default function App() {
         )}
 
         {activeTab === "revenue" && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 lg:space-y-12">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-12">
+            {/* KPI Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <KPICard
                 title="Total Revenue"
                 value={`SAR ${stats.totalRevenue.toLocaleString()}`}
@@ -486,43 +493,45 @@ export default function App() {
               />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
-              <div className="bg-white p-5 lg:p-6 rounded-2xl shadow-sm border border-slate-100">
-                <h3 className="text-base lg:text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+            {/* Revenue Breakdown Section */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
                   <Building2 className="w-5 h-5 text-blue-600" />
                   B2B Revenue Analysis
                 </h3>
-                <div className="space-y-3 lg:space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 bg-slate-50 rounded-xl gap-2">
-                    <span className="text-sm lg:text-base text-slate-600 font-medium">Company Due Amount</span>
-                    <span className="text-lg lg:text-xl font-black text-blue-600">SAR {stats.b2bRevenue.toLocaleString()}</span>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center p-4 bg-slate-50 rounded-xl">
+                    <span className="text-slate-600 font-medium">Company Due Amount</span>
+                    <span className="text-xl font-black text-blue-600">SAR {stats.b2bRevenue.toLocaleString()}</span>
                   </div>
                 </div>
               </div>
-              <div className="bg-white p-5 lg:p-6 rounded-2xl shadow-sm border border-slate-100">
-                <h3 className="text-base lg:text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
                   <Users className="w-5 h-5 text-green-600" />
                   B2C Revenue Analysis
                 </h3>
-                <div className="space-y-3 lg:space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 bg-slate-50 rounded-xl gap-2">
-                    <span className="text-sm lg:text-base text-slate-600 font-medium">Cash (Co Amount + VAT)</span>
-                    <span className="text-lg lg:text-xl font-black text-green-600">SAR {stats.b2cCashRevenue.toLocaleString()}</span>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center p-4 bg-slate-50 rounded-xl">
+                    <span className="text-slate-600 font-medium">Cash (Co Amount + VAT)</span>
+                    <span className="text-xl font-black text-green-600">SAR {stats.b2cCashRevenue.toLocaleString()}</span>
                   </div>
-                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 bg-slate-50 rounded-xl gap-2">
-                    <span className="text-sm lg:text-base text-slate-600 font-medium">Insurance (Company Due Amount)</span>
-                    <span className="text-lg lg:text-xl font-black text-green-600">SAR {stats.b2cInsuranceRevenue.toLocaleString()}</span>
+                  <div className="flex justify-between items-center p-4 bg-slate-50 rounded-xl">
+                    <span className="text-slate-600 font-medium">Insurance (Company Due Amount)</span>
+                    <span className="text-xl font-black text-green-600">SAR {stats.b2cInsuranceRevenue.toLocaleString()}</span>
                   </div>
-                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 bg-green-50 rounded-xl border border-green-100 gap-2">
-                    <span className="text-sm lg:text-base text-green-800 font-bold">Total B2C Revenue</span>
-                    <span className="text-lg lg:text-xl font-black text-green-700">SAR {stats.b2cRevenue.toLocaleString()}</span>
+                  <div className="flex justify-between items-center p-4 bg-green-50 rounded-xl border border-green-100">
+                    <span className="text-green-800 font-bold">Total B2C Revenue</span>
+                    <span className="text-xl font-black text-green-700">SAR {stats.b2cRevenue.toLocaleString()}</span>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-8 lg:gap-12">
-              <div className="h-[350px] lg:h-[500px]">
+            {/* Charts Section 1: Trends & Insurance */}
+            <div className="grid grid-cols-1 gap-12">
+              <div className="h-[500px]">
                 <DashboardChart
                   title="Revenue Trends (B2B vs B2C)"
                   type="line"
@@ -531,7 +540,7 @@ export default function App() {
                   colors={["#3b82f6", "#10b981"]}
                 />
               </div>
-              <div className="h-[350px] lg:h-[500px]">
+              <div className="h-[500px]">
                 <DashboardChart
                   title="Revenue by Insurance Company"
                   type="stackedBar"
@@ -544,8 +553,9 @@ export default function App() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-8 lg:gap-12">
-              <div className="h-[350px] lg:h-[500px]">
+            {/* Charts Section 2: Clinic & Doctor */}
+            <div className="grid grid-cols-1 gap-12">
+              <div className="h-[500px]">
                 <DashboardChart
                   title="Revenue by Clinic"
                   type="bar"
@@ -555,7 +565,7 @@ export default function App() {
                   dataKeys={["b2b", "b2c"]}
                 />
               </div>
-              <div className="h-[350px] lg:h-[500px]">
+              <div className="h-[500px]">
                 <DashboardChart
                   title="Revenue by Doctor (Top 10)"
                   type="bar"
@@ -570,9 +580,10 @@ export default function App() {
           </motion.div>
         )}
 
+        {/* --- VOLUME TAB --- */}
         {activeTab === "volume" && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 lg:space-y-12">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:gap-6">
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-12">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <KPICard
                 title="Total B2B Volume"
                 value={stats.b2bVolume.toLocaleString()}
@@ -585,7 +596,7 @@ export default function App() {
                 icon={<Users className="w-5 h-5" />}
                 className="border-l-4 border-l-green-500"
               />
-              <div className="bg-white p-5 lg:p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-center">
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-center">
                 <h3 className="text-sm font-semibold text-slate-900 mb-4">Patient Type Breakdown</h3>
                 <div className="h-32">
                   <DashboardChart
@@ -602,8 +613,8 @@ export default function App() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-8 lg:gap-12">
-              <div className="h-[350px] lg:h-[500px]">
+            <div className="grid grid-cols-1 gap-12">
+              <div className="h-[500px]">
                 <DashboardChart
                   title="Volume by Insurance"
                   type="stackedBar"
@@ -614,7 +625,7 @@ export default function App() {
                   dataKeys={["b2b", "b2c"]}
                 />
               </div>
-              <div className="h-[350px] lg:h-[500px]">
+              <div className="h-[500px]">
                 <DashboardChart
                   title="Volume by Clinic"
                   type="bar"
@@ -625,12 +636,25 @@ export default function App() {
                 />
               </div>
             </div>
+            
+            <div className="h-[500px]">
+              <DashboardChart
+                title="Volume by Doctor"
+                type="bar"
+                data={Object.entries(stats.volumeByDoctor)
+                  .map(([name, val]: [string, any]) => ({ name, b2b: val.b2b.size, b2c: val.b2c.size }))
+                  .sort((a, b) => (b.b2b + b.b2c) - (a.b2b + a.b2c))
+                  .slice(0, 15)}
+                dataKeys={["b2b", "b2c"]}
+              />
+            </div>
           </motion.div>
         )}
 
+        {/* --- CPP TAB --- */}
         {activeTab === "cpp" && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 lg:space-y-12">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:gap-6">
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-12">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <KPICard
                 title="Average CPP (Overall)"
                 value={`SAR ${stats.cpp}`}
@@ -652,8 +676,8 @@ export default function App() {
               />
             </div>
 
-            <div className="grid grid-cols-1 gap-8 lg:gap-12">
-              <div className="h-[350px] lg:h-[500px]">
+            <div className="grid grid-cols-1 gap-12">
+              <div className="h-[500px]">
                 <DashboardChart
                   title="CPP per Clinic"
                   type="bar"
@@ -662,7 +686,7 @@ export default function App() {
                   colors={["#8b5cf6"]}
                 />
               </div>
-              <div className="h-[350px] lg:h-[500px]">
+              <div className="h-[500px]">
                 <DashboardChart
                   title="CPP per Doctor (Top 10)"
                   type="bar"
@@ -672,45 +696,48 @@ export default function App() {
                 />
               </div>
             </div>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
-              <div className="bg-white rounded-2xl p-5 lg:p-6 shadow-sm border border-slate-100">
-                <h3 className="text-base lg:text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+
+            {/* Exact Numbers Cards */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Clinic CPP Details */}
+              <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+                <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
                   <Building2 className="w-5 h-5 text-blue-600" />
                   Detailed CPP by Clinic
                 </h3>
                 <div className="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
                   {cppByClinic.map((c, i) => (
-                    <div key={c.name} className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors gap-2">
-                      <div className="flex items-start sm:items-center gap-3">
-                        <span className="text-sm font-bold text-slate-400 w-5 pt-0.5 sm:pt-0">{i + 1}.</span>
+                    <div key={c.name} className="flex justify-between items-center p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-bold text-slate-400 w-5">{i + 1}.</span>
                         <div>
-                          <p className="font-semibold text-slate-800 text-sm sm:text-base">{c.name}</p>
+                          <p className="font-semibold text-slate-800">{c.name}</p>
                           <p className="text-xs text-slate-500">Vol: {c.volume} | Rev: SAR {c.revenue.toLocaleString()}</p>
                         </div>
                       </div>
-                      <span className="font-black text-base sm:text-lg text-purple-600 ml-8 sm:ml-0">SAR {c.cpp}</span>
+                      <span className="font-black text-lg text-purple-600">SAR {c.cpp}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl p-5 lg:p-6 shadow-sm border border-slate-100">
-                <h3 className="text-base lg:text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+              {/* Doctor CPP Details */}
+              <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+                <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
                   <Stethoscope className="w-5 h-5 text-blue-600" />
                   Detailed CPP by Doctor
                 </h3>
                 <div className="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
                   {cppByDoctor.map((c, i) => (
-                    <div key={c.name} className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors gap-2">
-                      <div className="flex items-start sm:items-center gap-3">
-                        <span className="text-sm font-bold text-slate-400 w-5 pt-0.5 sm:pt-0">{i + 1}.</span>
+                    <div key={c.name} className="flex justify-between items-center p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-bold text-slate-400 w-5">{i + 1}.</span>
                         <div>
-                          <p className="font-semibold text-slate-800 text-sm sm:text-base">{c.name}</p>
+                          <p className="font-semibold text-slate-800">{c.name}</p>
                           <p className="text-xs text-slate-500">Vol: {c.volume} | Rev: SAR {c.revenue.toLocaleString()}</p>
                         </div>
                       </div>
-                      <span className="font-black text-base sm:text-lg text-purple-600 ml-8 sm:ml-0">SAR {c.cpp}</span>
+                      <span className="font-black text-lg text-purple-600">SAR {c.cpp}</span>
                     </div>
                   ))}
                 </div>
@@ -720,6 +747,7 @@ export default function App() {
         )}
       </main>
 
+      {/* Presentation Mode Overlay */}
       <AnimatePresence>
         {isPresentationMode && (
           <PresentationMode
