@@ -18,8 +18,21 @@ export function parseExcelDate(dateValue: any): Date {
   }
   
   if (typeof dateValue === 'string') {
-    const trimmed = dateValue.trim();
+    let trimmed = dateValue.trim();
     
+    // Handle Arabic months
+    const arabicMonths: Record<string, string> = {
+      'يناير': 'Jan', 'فبراير': 'Feb', 'مارس': 'Mar', 'أبريل': 'Apr', 'ابريل': 'Apr',
+      'مايو': 'May', 'يونيو': 'Jun', 'يوليو': 'Jul', 'أغسطس': 'Aug', 'اغسطس': 'Aug',
+      'سبتمبر': 'Sep', 'أكتوبر': 'Oct', 'اكتوبر': 'Oct', 'نوفمبر': 'Nov', 'ديسمبر': 'Dec'
+    };
+    
+    for (const [ar, en] of Object.entries(arabicMonths)) {
+      if (trimmed.includes(ar)) {
+        trimmed = trimmed.replace(ar, en);
+      }
+    }
+
     // Check if it's a string representation of an Excel serial number
     if (/^\d+$/.test(trimmed) && Number(trimmed) > 20000) {
       const dateInfo = new Date(Math.round((Number(trimmed) - 25569) * 86400 * 1000));
@@ -33,18 +46,38 @@ export function parseExcelDate(dateValue: any): Date {
         let day = Number(parts[0]);
         let month = Number(parts[1]);
         let year = Number(parts[2]);
-        if (year < 100) year += 2000;
         
-        // If month > 12, it must be MM/DD/YYYY
-        if (month > 12) {
-          day = Number(parts[1]);
-          month = Number(parts[0]);
+        if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+          if (year < 100) year += 2000;
+          
+          // If month > 12, it must be MM/DD/YYYY
+          if (month > 12) {
+            day = Number(parts[1]);
+            month = Number(parts[0]);
+          }
+          return new Date(year, month - 1, day);
         }
-        return new Date(year, month - 1, day);
       }
       if (parts[0].length === 4) {
-        // Assume YYYY/MM/DD
-        return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        let year = Number(parts[0]);
+        let month = Number(parts[1]);
+        let day = Number(parts[2]);
+        if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+          // Assume YYYY/MM/DD
+          return new Date(year, month - 1, day);
+        }
+      }
+    } else if (parts.length === 2) {
+      let p0 = Number(parts[0]);
+      let p1 = Number(parts[1]);
+      if (!isNaN(p0) && !isNaN(p1)) {
+        if (parts[1].length === 4) {
+          // MM-YYYY
+          return new Date(p1, p0 - 1, 1);
+        } else if (parts[0].length === 4) {
+          // YYYY-MM
+          return new Date(p0, p1 - 1, 1);
+        }
       }
     }
 
