@@ -211,9 +211,13 @@ export function processRawData(data: RawDataRow[]): ProcessedRow[] {
       const lastComma = str.lastIndexOf(',');
       const lastDot = str.lastIndexOf('.');
       
+      // Count occurrences of commas and dots
+      const commaCount = (str.match(/,/g) || []).length;
+      const dotCount = (str.match(/\./g) || []).length;
+
       if (lastComma > lastDot && lastComma !== -1) {
-        if (lastDot === -1 && str.length - lastComma === 4) {
-           // It's like "1,234". Assume it's a thousands separator (US format).
+        // If there are multiple commas, or if the comma is exactly 3 digits from the end and there's no dot, it's likely a US thousands separator
+        if (commaCount > 1 || (lastDot === -1 && str.length - lastComma === 4)) {
            str = str.replace(/,/g, '');
         } else {
            // Comma is the decimal separator
@@ -221,8 +225,8 @@ export function processRawData(data: RawDataRow[]): ProcessedRow[] {
            str = str.replace(',', '.'); // convert decimal comma to dot
         }
       } else {
-        if (lastComma === -1 && str.length - lastDot === 4) {
-           // It's like "1.234". Assume it's a thousands separator (European format).
+        // If there are multiple dots, or if the dot is exactly 3 digits from the end and there's no comma, it's likely a European thousands separator
+        if (dotCount > 1 || (lastComma === -1 && str.length - lastDot === 4)) {
            str = str.replace(/\./g, '');
         } else {
            // Dot is the decimal separator
