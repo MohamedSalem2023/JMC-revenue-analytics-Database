@@ -35,12 +35,25 @@ if (uri.includes("<") || uri.includes(">")) {
   uri = uri.replace(/<|>/g, "");
 }
 
-let client: MongoClient;
-let db: any;
+let client: MongoClient | null = null;
+let db: any = null;
 
 async function getDb() {
-  if (db) return db;
-  
+  // If we have a live client, return the cached db
+  if (client && db) {
+    try {
+      // Ping to verify the connection is still alive
+      await client.db("admin").command({ ping: 1 });
+      return db;
+    } catch {
+      // Connection is dead — fall through to reconnect
+      console.log("MongoDB connection lost. Reconnecting...");
+      try { await client.close(); } catch {}
+      client = null;
+      db = null;
+    }
+  }
+
   console.log("Initializing MongoClient with URI...");
   client = new MongoClient(uri as string, {
     serverApi: {
@@ -48,10 +61,20 @@ async function getDb() {
       strict: true,
       deprecationErrors: true,
     },
-    connectTimeoutMS: 10000,
-    socketTimeoutMS: 45000,
+    // Connection timeouts
+    connectTimeoutMS: 30000,
+    socketTimeoutMS: 60000,
+    serverSelectionTimeoutMS: 30000,
+    // Keep connections alive so Atlas Free Tier doesn't drop them silently
+    maxIdleTimeMS: 60000,      // close idle connections after 60s (before Atlas drops them)
+    // Connection pool — keep it small for Free Tier (max 500 total connections)
+    maxPoolSize: 5,
+    minPoolSize: 1,
+    // Retry failed operations automatically
+    retryWrites: true,
+    retryReads: true,
   });
-  
+
   try {
     await client.connect();
     console.log("Successfully connected to MongoDB!");
@@ -59,6 +82,8 @@ async function getDb() {
     return db;
   } catch (error: any) {
     console.error("MongoDB connection error:", error.message);
+    client = null;
+    db = null;
     throw error;
   }
 }
