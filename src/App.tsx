@@ -46,6 +46,7 @@ export default function App() {
   const isAdmin = user?.email === 'medoelkateb@gmail.com';
 
   const [filters, setFilters] = useState({
+    year: "All",
     startDate: "",
     endDate: "",
     revenueType: "All" as "All" | "B2B" | "B2C",
@@ -198,6 +199,11 @@ export default function App() {
   const processedData = useMemo(() => {
     if (!baseProcessedData || baseProcessedData.length === 0) return [];
     let data = baseProcessedData;
+    
+    if (filters.year !== "All") {
+      const yearNum = parseInt(filters.year, 10);
+      data = data.filter(row => row.date.getFullYear() === yearNum);
+    }
 
     // Apply Filters
     if (filters.startDate) {
@@ -239,8 +245,9 @@ export default function App() {
   const stats = useMemo(() => calculateStats(processedData), [processedData]);
 
   const filterOptions = useMemo(() => {
-    if (!baseProcessedData || baseProcessedData.length === 0) return { clinics: [], doctors: [], insurance: [] };
+    if (!baseProcessedData || baseProcessedData.length === 0) return { years: [], clinics: [], doctors: [], insurance: [] };
     return {
+      years: Array.from(new Set(baseProcessedData.map(r => r.date.getFullYear().toString()))).sort((a, b) => b.localeCompare(a)),
       clinics: Array.from(new Set(baseProcessedData.map(r => r.clinic))).sort(),
       doctors: Array.from(new Set(baseProcessedData.map(r => r.doctor))).sort(),
       insurance: Array.from(new Set(baseProcessedData.map(r => r.insuranceCompany))).sort(),
@@ -346,6 +353,7 @@ export default function App() {
 
         <div className="flex-1 overflow-y-auto">
           <Filters
+            years={filterOptions.years}
             clinics={filterOptions.clinics}
             doctors={filterOptions.doctors}
             insuranceCompanies={filterOptions.insurance}
