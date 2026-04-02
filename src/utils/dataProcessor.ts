@@ -18,7 +18,13 @@ export function parseExcelDate(dateValue: any): Date {
   }
   
   if (typeof dateValue === 'string') {
-    let trimmed = dateValue.trim();
+    let trimmed = dateValue.trim().replace(/[\u200B-\u200D\uFEFF]/g, '');
+    
+    // Convert Arabic digits to English digits
+    const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    for (let i = 0; i < 10; i++) {
+      trimmed = trimmed.replace(new RegExp(arabicNumbers[i], 'g'), i.toString());
+    }
     
     // Handle Arabic months
     const arabicMonths: Record<string, string> = {
@@ -40,7 +46,7 @@ export function parseExcelDate(dateValue: any): Date {
     }
 
     // Handle DD/MM/YYYY, DD-MM-YYYY, or DD.MM.YYYY
-    const parts = trimmed.split(/[-/.]/);
+    const parts = trimmed.split(/[-/.]/).map(p => p.trim());
     if (parts.length === 3) {
       if (parts[2].length === 4 || parts[2].length === 2) {
         let day = Number(parts[0]);
@@ -90,7 +96,12 @@ export function parseExcelDate(dateValue: any): Date {
        
        // Handle ISO strings (e.g., from localforage storage fallback or Firestore)
        if (trimmed.includes('T') && trimmed.endsWith('Z')) {
-         // Always use the UTC date, ignoring the time component, because the date was originally recorded in UTC by xlsx
+         // If the time is 22:00:00 or 23:00:00, it's likely a local midnight date that was converted to UTC.
+         // In this case, we should use the local date components to restore the original date.
+         if (trimmed.includes('T22:00:00') || trimmed.includes('T23:00:00')) {
+           return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+         }
+         // Otherwise, use the UTC date components.
          return new Date(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate());
        }
        
@@ -141,12 +152,12 @@ export function processRawData(data: RawDataRow[]): ProcessedRow[] {
     if (!isMapped('Clinic') && (normKey.includes('clinic') || normKey.includes('department') || normKey.includes('عيادة') || normKey.includes('قسم'))) colMap['Clinic'] = key;
     if (!isMapped('Doctor') && (normKey.includes('doctor') || normKey.includes('physician') || normKey.includes('طبيب') || normKey.includes('دكتور'))) colMap['Doctor'] = key;
     
-    if (!isMapped('Company Due Amount') && (normKey.includes('companydue') || normKey === 'due' || normKey.includes('claim') || normKey.includes('مطالبة') || normKey.includes('مستحق'))) colMap['Company Due Amount'] = key;
-    if (!isMapped('Co Amount') && (normKey.includes('coamount') || normKey.includes('copay') || normKey.includes('patientshare') || normKey.includes('تحمل') || normKey.includes('مريض') || normKey.includes('كاش'))) colMap['Co Amount'] = key;
-    if (!isMapped('VAT') && (normKey.includes('vat') || normKey.includes('tax') || normKey.includes('ضريبة') || normKey.includes('قيمةمضافة'))) colMap['VAT'] = key;
+    if (!isMapped('Company Due Amount') && (normKey.includes('companydue') || normKey.includes('claim') || normKey.includes('مطالبة') || normKey.includes('مستحق') || normKey.includes('شركة') || normKey.includes('تأمين') || normKey.includes('payor'))) colMap['Company Due Amount'] = key;
+    if (!isMapped('Co Amount') && (normKey.includes('coamount') || normKey.includes('copay') || normKey.includes('patientshare') || normKey.includes('تحمل') || normKey.includes('مريض') || normKey.includes('كاش') || normKey.includes('نقدي') || normKey.includes('مساهمة') || normKey.includes('deductible'))) colMap['Co Amount'] = key;
+    if (!isMapped('VAT') && (normKey.includes('vat') || normKey.includes('tax') || normKey.includes('ضريبة') || normKey.includes('مضافة'))) colMap['VAT'] = key;
     
     if (!isMapped('Total Value') && !normKey.includes('vat') && !normKey.includes('tax') && !normKey.includes('ضريبة') && 
-        (normKey.includes('totalvalue') || normKey.includes('total') || normKey.includes('net') || normKey.includes('revenue') || normKey.includes('gross') || normKey.includes('amount') || normKey.includes('إجمالي') || normKey.includes('اجمالي') || normKey.includes('صافي') || normKey.includes('مبلغ'))) {
+        (normKey.includes('totalvalue') || normKey.includes('total') || normKey.includes('net') || normKey.includes('revenue') || normKey.includes('gross') || normKey.includes('amount') || normKey.includes('إجمالي') || normKey.includes('اجمالي') || normKey.includes('صافي') || normKey.includes('مبلغ') || normKey.includes('قيمة') || normKey.includes('مجموع'))) {
       colMap['Total Value'] = key;
     }
   }
@@ -192,8 +203,35 @@ export function processRawData(data: RawDataRow[]): ProcessedRow[] {
       }
       
       let isNegative = str.startsWith('(') && str.endsWith(')') || str.includes('-');
-      str = str.replace(/[^0-9.]/g, '');
-      let num = Number(str) || 0;
+      
+      // Remove everything except digits, dots, and commas
+      str = str.replace(/[^0-9.,]/g, '');
+      
+      // Handle European format (e.g., 1.234,56 or 1234,56)
+      const lastComma = str.lastIndexOf(',');
+      const lastDot = str.lastIndexOf('.');
+      
+      if (lastComma > lastDot && lastComma !== -1) {
+        if (lastDot === -1 && str.length - lastComma === 4) {
+           // It's like "1,234". Assume it's a thousands separator (US format).
+           str = str.replace(/,/g, '');
+        } else {
+           // Comma is the decimal separator
+           str = str.replace(/\./g, ''); // remove thousands separators
+           str = str.replace(',', '.'); // convert decimal comma to dot
+        }
+      } else {
+        if (lastComma === -1 && str.length - lastDot === 4) {
+           // It's like "1.234". Assume it's a thousands separator (European format).
+           str = str.replace(/\./g, '');
+        } else {
+           // Dot is the decimal separator
+           str = str.replace(/,/g, ''); // remove thousands separators
+        }
+      }
+      
+      let num = Number(str);
+      if (isNaN(num)) num = 0;
       return isNegative ? -num : num;
     };
 
