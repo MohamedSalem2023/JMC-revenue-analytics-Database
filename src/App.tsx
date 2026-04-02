@@ -64,10 +64,14 @@ export default function App() {
 
   const loadData = async () => {
     setIsLoadingData(true);
+    console.log("Attempting to load data from /api/data...");
     try {
       const response = await fetch('/api/data');
+      console.log("Response received from /api/data. Status:", response.status);
+      
       if (!response.ok) {
         const text = await response.text();
+        console.error("Server error response text:", text);
         let errorMessage = `Server error (${response.status})`;
         try {
           const errData = JSON.parse(text);
@@ -77,7 +81,9 @@ export default function App() {
         }
         throw new Error(errorMessage);
       }
+      
       const result = await response.json();
+      console.log("Data successfully parsed. Row count:", result.data ? result.data.length : 0);
       
       if (result.data && result.data.length > 0) {
         setRawData(result.data);
@@ -85,8 +91,14 @@ export default function App() {
         setRawData(null);
       }
     } catch (error: any) {
-      console.error("Failed to load data from MongoDB", error);
-      alert("Error loading data from database: " + error.message);
+      console.error("Failed to load data from MongoDB. Error details:", error);
+      // Check if it's a fetch error (network, timeout, etc.)
+      const isFetchError = error.message === "Failed to fetch" || error.name === "TypeError";
+      const alertMsg = isFetchError 
+        ? "Network error: Could not connect to the database server. Please check if the server is running or try refreshing."
+        : "Error loading data from database: " + error.message;
+      
+      alert(alertMsg);
     } finally {
       setIsLoadingData(false);
     }
@@ -104,21 +116,43 @@ export default function App() {
 
     try {
       if (onProgress) onProgress("Merging new data with existing records...");
+      
+      // Find date column key for new data
+      const newHeaderRow = newData.length > 0 ? Object.keys(newData[0]) : [];
+      let newDateCol = "Date";
+      for (const key of newHeaderRow) {
+        const normKey = String(key).toLowerCase().replace(/[^a-z0-9\u0600-\u06FF]/g, '');
+        if (normKey.includes('date') || normKey.includes('تاريخ')) {
+          newDateCol = key;
+          break;
+        }
+      }
+
       // Merge logic: replace existing data for the dates present in the new sheet
       const newDates = new Set<string>();
       for (let i = 0; i < newData.length; i++) {
-        const d = parseExcelDate(newData[i].Date);
-        if (!isNaN(d.getTime())) {
+        const d = parseExcelDate(newData[i][newDateCol] !== undefined ? newData[i][newDateCol] : newData[i].Date);
+        if (d && !isNaN(d.getTime())) {
           newDates.add(d.toDateString());
         }
       }
 
       const existingData = rawData || [];
+      const existingHeaderRow = existingData.length > 0 ? Object.keys(existingData[0]) : [];
+      let existingDateCol = "Date";
+      for (const key of existingHeaderRow) {
+        const normKey = String(key).toLowerCase().replace(/[^a-z0-9\u0600-\u06FF]/g, '');
+        if (normKey.includes('date') || normKey.includes('تاريخ')) {
+          existingDateCol = key;
+          break;
+        }
+      }
+
       const filteredExistingData = [];
       for (let i = 0; i < existingData.length; i++) {
         const row = existingData[i];
-        const d = parseExcelDate(row.Date);
-        if (isNaN(d.getTime()) || !newDates.has(d.toDateString())) {
+        const d = parseExcelDate(row[existingDateCol] !== undefined ? row[existingDateCol] : row.Date);
+        if (!d || isNaN(d.getTime()) || !newDates.has(d.toDateString())) {
           filteredExistingData.push(row);
         }
       }
@@ -159,6 +193,17 @@ export default function App() {
       if (onProgress) onProgress("Finalizing upload...");
 
       setRawData(mergedData);
+      
+      // Reset filters to show all new data
+      setFilters({
+        year: "All",
+        startDate: "",
+        endDate: "",
+        revenueType: "All",
+        clinics: [],
+        doctors: [],
+        insurance: [],
+      });
     } catch (error) {
       console.error("Error saving to MongoDB", error);
       alert("Failed to save data to cloud. " + (error as Error).message);
@@ -196,12 +241,23 @@ export default function App() {
     return processRawData(rawData);
   }, [rawData]);
 
+  const filterOptions = useMemo(() => {
+    if (!baseProcessedData || baseProcessedData.length === 0) return { years: [], clinics: [], doctors: [], insurance: [] };
+    return {
+      years: Array.from(new Set(baseProcessedData.map(r => r.date.getFullYear().toString()))).sort((a, b) => (b as string).localeCompare(a as string)),
+      clinics: Array.from(new Set(baseProcessedData.map(r => r.clinic))).sort(),
+      doctors: Array.from(new Set(baseProcessedData.map(r => r.doctor))).sort(),
+      insurance: Array.from(new Set(baseProcessedData.map(r => r.insuranceCompany))).sort(),
+    };
+  }, [baseProcessedData]);
+
   const processedData = useMemo(() => {
     if (!baseProcessedData || baseProcessedData.length === 0) return [];
     let data = baseProcessedData;
     
-    if (filters.year !== "All") {
-      const yearNum = parseInt(filters.year, 10);
+    const validYear = filters.year === "All" || filterOptions.years.includes(filters.year) ? filters.year : "All";
+    if (validYear !== "All") {
+      const yearNum = parseInt(validYear, 10);
       data = data.filter(row => row.date.getFullYear() === yearNum);
     }
 
@@ -229,30 +285,26 @@ export default function App() {
     if (filters.revenueType !== "All") {
       data = data.filter(row => row.category === filters.revenueType);
     }
-    if (filters.clinics.length > 0) {
-      data = data.filter(row => filters.clinics.includes(row.clinic));
+    
+    const validClinics = filters.clinics.filter(c => filterOptions.clinics.includes(c));
+    if (validClinics.length > 0) {
+      data = data.filter(row => validClinics.includes(row.clinic));
     }
-    if (filters.doctors.length > 0) {
-      data = data.filter(row => filters.doctors.includes(row.doctor));
+    
+    const validDoctors = filters.doctors.filter(d => filterOptions.doctors.includes(d));
+    if (validDoctors.length > 0) {
+      data = data.filter(row => validDoctors.includes(row.doctor));
     }
-    if (filters.insurance.length > 0) {
-      data = data.filter(row => filters.insurance.includes(row.insuranceCompany));
+    
+    const validInsurance = filters.insurance.filter(i => filterOptions.insurance.includes(i));
+    if (validInsurance.length > 0) {
+      data = data.filter(row => validInsurance.includes(row.insuranceCompany));
     }
 
     return data;
   }, [baseProcessedData, filters]);
 
   const stats = useMemo(() => calculateStats(processedData), [processedData]);
-
-  const filterOptions = useMemo(() => {
-    if (!baseProcessedData || baseProcessedData.length === 0) return { years: [], clinics: [], doctors: [], insurance: [] };
-    return {
-      years: Array.from(new Set(baseProcessedData.map(r => r.date.getFullYear().toString()))).sort((a, b) => b.localeCompare(a)),
-      clinics: Array.from(new Set(baseProcessedData.map(r => r.clinic))).sort(),
-      doctors: Array.from(new Set(baseProcessedData.map(r => r.doctor))).sort(),
-      insurance: Array.from(new Set(baseProcessedData.map(r => r.insuranceCompany))).sort(),
-    };
-  }, [baseProcessedData]);
 
   const cppByClinic = useMemo(() => {
     return Object.entries(stats.revenueByClinic)
