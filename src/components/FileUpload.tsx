@@ -79,13 +79,13 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
             if (!isMapped('Doctor') && (normKey.includes('doctor') || normKey.includes('physician') || normKey.includes('طبيب') || normKey.includes('دكتور'))) colMap['Doctor'] = key;
             
             // Be careful with partial matches for amounts to avoid mixing them up
-            if (!isMapped('Company Due Amount') && (normKey.includes('companydue') || normKey === 'due' || normKey.includes('claim') || normKey.includes('مطالبة') || normKey.includes('مستحق'))) colMap['Company Due Amount'] = key;
-            if (!isMapped('Co Amount') && (normKey.includes('coamount') || normKey.includes('copay') || normKey.includes('patientshare') || normKey.includes('تحمل') || normKey.includes('مريض') || normKey.includes('كاش'))) colMap['Co Amount'] = key;
-            if (!isMapped('VAT') && (normKey.includes('vat') || normKey.includes('tax') || normKey.includes('ضريبة') || normKey.includes('قيمةمضافة'))) colMap['VAT'] = key;
+            if (!isMapped('Company Due Amount') && (normKey.includes('companydue') || normKey.includes('claim') || normKey.includes('مطالبة') || normKey.includes('مستحق') || normKey.includes('شركة') || normKey.includes('تأمين') || normKey.includes('payor'))) colMap['Company Due Amount'] = key;
+            if (!isMapped('Co Amount') && (normKey.includes('coamount') || normKey.includes('copay') || normKey.includes('patientshare') || normKey.includes('تحمل') || normKey.includes('مريض') || normKey.includes('كاش') || normKey.includes('نقدي') || normKey.includes('مساهمة') || normKey.includes('deductible'))) colMap['Co Amount'] = key;
+            if (!isMapped('VAT') && (normKey.includes('vat') || normKey.includes('tax') || normKey.includes('ضريبة') || normKey.includes('مضافة'))) colMap['VAT'] = key;
             
             // Total value should be matched last to avoid matching "Total VAT" etc.
             if (!isMapped('Total Value') && !normKey.includes('vat') && !normKey.includes('tax') && !normKey.includes('ضريبة') && 
-                (normKey.includes('totalvalue') || normKey.includes('total') || normKey.includes('net') || normKey.includes('revenue') || normKey.includes('gross') || normKey.includes('amount') || normKey.includes('إجمالي') || normKey.includes('اجمالي') || normKey.includes('صافي') || normKey.includes('مبلغ'))) {
+                (normKey.includes('totalvalue') || normKey.includes('total') || normKey.includes('net') || normKey.includes('revenue') || normKey.includes('gross') || normKey.includes('amount') || normKey.includes('إجمالي') || normKey.includes('اجمالي') || normKey.includes('صافي') || normKey.includes('مبلغ') || normKey.includes('قيمة') || normKey.includes('مجموع'))) {
               colMap['Total Value'] = key;
             }
           }
