@@ -39,6 +39,7 @@ export default function App() {
   const [rawData, setRawData] = useState<RawDataRow[] | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isPresentationMode, setIsPresentationMode] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // حالة القائمة الجانبية للموبايل
   const [activeTab, setActiveTab] = useState<"revenue" | "volume" | "cpp" | "data">("revenue");
   const [user, setUser] = useState<User | null>(null);
   
@@ -63,7 +64,6 @@ export default function App() {
   const loadData = async () => {
     setIsLoadingData(true);
     try {
-      // محاولة جلب البيانات من السيرفر
       const response = await fetch('/api/data');
       
       if (!response.ok) {
@@ -87,7 +87,6 @@ export default function App() {
       }
     } catch (error: any) {
       console.error("Failed to load data from MongoDB", error);
-      // إظهار رسالة الخطأ بالتفصيل للمستخدم
       alert("Error loading data from database: " + error.message);
     } finally {
       setIsLoadingData(false);
@@ -269,42 +268,42 @@ export default function App() {
 
   if (isLoadingData) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
-        <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
-        <p className="text-slate-500 font-medium">Loading your database...</p>
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 md:p-6">
+        <Loader2 className="w-10 h-10 md:w-12 md:h-12 text-blue-600 animate-spin mb-4" />
+        <p className="text-slate-500 font-medium text-sm md:text-base">Loading your database...</p>
       </div>
     );
   }
 
   if (!rawData) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
-        <div className="text-center mb-12">
-          <div className="flex flex-col items-center justify-center mb-8">
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 md:p-6">
+        <div className="text-center mb-8 md:mb-12">
+          <div className="flex flex-col items-center justify-center mb-6 md:mb-8">
             <img 
               src="https://scontent.fdmm3-2.fna.fbcdn.net/v/t39.30808-6/450998298_1150415529461259_130598404335151586_n.jpg?_nc_cat=107&ccb=1-7&_nc_sid=1d70fc&_nc_ohc=LcOecER7Vb8Q7kNvwErsy3r&_nc_oc=Adruk9JnfgD1599db-aJMpbyCJdUsG2mznfW5aVdtusbLgTY2GPP_WIcIv72ta6DEADZYmkY3yAE63Brkm_x_qcj&_nc_zt=23&_nc_ht=scontent.fdmm3-2.fna&_nc_gid=2SF07jAdE6bjLjJFwgUb4g&_nc_ss=7a3a8&oh=00_AfyJpTLVbaYQ1MK8C1itpP9WmWPoHkCGJgXUhf4eDPavZA&oe=69D18B30" 
               alt="مركز طوارئيات للعناية الطبية - الجبيل" 
-              className="w-32 h-32 object-contain rounded-2xl shadow-lg mb-4"
+              className="w-24 h-24 md:w-32 md:h-32 object-contain rounded-2xl shadow-lg mb-4"
               referrerPolicy="no-referrer"
             />
-            <h2 className="text-2xl font-bold text-slate-800">مركز طوارئيات للعناية الطبية - الجبيل</h2>
+            <h2 className="text-xl md:text-2xl font-bold text-slate-800 text-center px-4">مركز طوارئيات للعناية الطبية - الجبيل</h2>
           </div>
-          <h1 className="text-4xl font-black text-slate-900 mb-4 tracking-tight">Revenue Analytics</h1>
-          <p className="text-slate-500 max-w-md mx-auto text-lg">
+          <h1 className="text-3xl md:text-4xl font-black text-slate-900 mb-4 tracking-tight">Revenue Analytics</h1>
+          <p className="text-slate-500 max-w-md mx-auto text-base md:text-lg px-4">
             Transform your healthcare data into executive-level insights. Upload your master data sheet to begin.
           </p>
         </div>
-        <div className="mt-12 w-full max-w-2xl mx-auto">
+        <div className="mt-4 md:mt-8 w-full max-w-2xl mx-auto px-4">
           {isAdmin ? (
             <FileUpload onDataLoaded={handleDataLoaded} />
           ) : (
-            <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100 text-center">
-              <Database className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-slate-800 mb-2">No Data Available</h3>
-              <p className="text-slate-500 mb-6">The database is currently empty. The administrator needs to upload the initial data.</p>
+            <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 text-center">
+              <Database className="w-10 h-10 md:w-12 md:h-12 text-slate-300 mx-auto mb-4" />
+              <h3 className="text-lg md:text-xl font-bold text-slate-800 mb-2">No Data Available</h3>
+              <p className="text-sm md:text-base text-slate-500 mb-6">The database is currently empty. The administrator needs to upload the initial data.</p>
               <button 
                 onClick={signInWithGoogle}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-xl font-semibold hover:bg-slate-800 transition-all"
+                className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-xl font-semibold hover:bg-slate-800 transition-all w-full sm:w-auto"
               >
                 <LogIn className="w-5 h-5" />
                 Admin Login
@@ -317,8 +316,32 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
-      <div className="flex flex-col h-screen sticky top-0 bg-white border-r border-slate-200 w-80 z-20">
+    <div className="min-h-screen bg-slate-50 flex overflow-hidden relative">
+      
+      {/* Mobile Overlay */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden backdrop-blur-sm"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <div className={cn(
+        "fixed inset-y-0 left-0 z-50 w-[280px] sm:w-80 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:h-screen flex flex-col shadow-2xl lg:shadow-none",
+        isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+      )}>
+        {/* Mobile Sidebar Header */}
+        <div className="flex items-center justify-between p-4 lg:hidden border-b border-slate-100">
+          <span className="font-bold text-slate-800">Menu & Filters</span>
+          <button 
+            onClick={() => setIsSidebarOpen(false)} 
+            className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
         <div className="flex-1 overflow-y-auto">
           <Filters
             clinics={filterOptions.clinics}
@@ -327,7 +350,10 @@ export default function App() {
             selectedFilters={filters}
             onFilterChange={setFilters}
             activeTab={activeTab}
-            setActiveTab={setActiveTab}
+            setActiveTab={(tab) => {
+              setActiveTab(tab);
+              setIsSidebarOpen(false); // إغلاق القائمة عند اختيار تبويب في الموبايل
+            }}
             isAdmin={isAdmin}
           />
         </div>
@@ -346,7 +372,7 @@ export default function App() {
               </div>
               <button 
                 onClick={logout}
-                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
                 title="Logout"
               >
                 <LogOut className="w-4 h-4" />
@@ -364,40 +390,48 @@ export default function App() {
         </div>
       </div>
 
-      <main className="flex-1 p-8 lg:p-12 overflow-y-auto custom-scrollbar">
-        <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-12">
-          <div>
-            <div className="flex items-center gap-2 text-blue-600 font-bold text-sm uppercase tracking-widest mb-2">
-              {activeTab === "revenue" && <><TrendingUp className="w-4 h-4" /> Executive Dashboard</>}
-              {activeTab === "volume" && <><Users className="w-4 h-4" /> Volume Dashboard</>}
-              {activeTab === "cpp" && <><PieChartIcon className="w-4 h-4" /> CPP Dashboard</>}
-              {activeTab === "data" && <><Database className="w-4 h-4" /> Data Management</>}
+      {/* Main Content */}
+      <main className="flex-1 p-4 sm:p-6 lg:p-12 h-screen overflow-y-auto custom-scrollbar w-full">
+        <header className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 xl:gap-6 mb-8 lg:mb-12">
+          <div className="flex items-start gap-3 sm:gap-4">
+            <button 
+              onClick={() => setIsSidebarOpen(true)}
+              className="lg:hidden p-2 mt-1 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 shadow-sm flex-shrink-0"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+            <div>
+              <div className="flex items-center gap-2 text-blue-600 font-bold text-xs sm:text-sm uppercase tracking-widest mb-1 sm:mb-2">
+                {activeTab === "revenue" && <><TrendingUp className="w-3 h-3 sm:w-4 sm:h-4" /> Executive Dashboard</>}
+                {activeTab === "volume" && <><Users className="w-3 h-3 sm:w-4 sm:h-4" /> Volume Dashboard</>}
+                {activeTab === "cpp" && <><PieChartIcon className="w-3 h-3 sm:w-4 sm:h-4" /> CPP Dashboard</>}
+                {activeTab === "data" && <><Database className="w-3 h-3 sm:w-4 sm:h-4" /> Data Management</>}
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                {activeTab === "revenue" && "Revenue Performance"}
+                {activeTab === "volume" && "Volume Analysis"}
+                {activeTab === "cpp" && "Cost Per Patient (CPP)"}
+                {activeTab === "data" && "Database & Uploads"}
+              </h1>
             </div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight">
-              {activeTab === "revenue" && "Revenue Performance"}
-              {activeTab === "volume" && "Volume Analysis"}
-              {activeTab === "cpp" && "Cost Per Patient (CPP) Analysis"}
-              {activeTab === "data" && "Database & Uploads"}
-            </h1>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <button
               onClick={handleRefresh}
-              className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm"
-              title="Refresh Data"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm text-sm sm:text-base"
             >
               <RefreshCw className="w-4 h-4" />
-              Refresh
+              <span className="hidden sm:inline">Refresh</span>
             </button>
             <button
               onClick={() => setIsPresentationMode(true)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-xl font-semibold hover:bg-slate-800 transition-all shadow-lg shadow-slate-200"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 text-white rounded-xl font-semibold hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 text-sm sm:text-base"
             >
               <Maximize2 className="w-4 h-4" />
-              Presentation Mode
+              <span className="hidden sm:inline">Presentation</span>
             </button>
-            <div className="h-10 w-px bg-slate-200 mx-2" />
+            <div className="hidden sm:block h-10 w-px bg-slate-200 mx-1" />
             <button
               onClick={() => exportToExcel(processedData)}
               className="p-2.5 bg-white text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all"
@@ -424,8 +458,8 @@ export default function App() {
         )}
 
         {activeTab === "revenue" && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-12">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 lg:space-y-12">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
               <KPICard
                 title="Total Revenue"
                 value={`SAR ${stats.totalRevenue.toLocaleString()}`}
@@ -452,43 +486,43 @@ export default function App() {
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
+              <div className="bg-white p-5 lg:p-6 rounded-2xl shadow-sm border border-slate-100">
+                <h3 className="text-base lg:text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
                   <Building2 className="w-5 h-5 text-blue-600" />
                   B2B Revenue Analysis
                 </h3>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center p-4 bg-slate-50 rounded-xl">
-                    <span className="text-slate-600 font-medium">Company Due Amount</span>
-                    <span className="text-xl font-black text-blue-600">SAR {stats.b2bRevenue.toLocaleString()}</span>
+                <div className="space-y-3 lg:space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 bg-slate-50 rounded-xl gap-2">
+                    <span className="text-sm lg:text-base text-slate-600 font-medium">Company Due Amount</span>
+                    <span className="text-lg lg:text-xl font-black text-blue-600">SAR {stats.b2bRevenue.toLocaleString()}</span>
                   </div>
                 </div>
               </div>
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+              <div className="bg-white p-5 lg:p-6 rounded-2xl shadow-sm border border-slate-100">
+                <h3 className="text-base lg:text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
                   <Users className="w-5 h-5 text-green-600" />
                   B2C Revenue Analysis
                 </h3>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center p-4 bg-slate-50 rounded-xl">
-                    <span className="text-slate-600 font-medium">Cash (Co Amount + VAT)</span>
-                    <span className="text-xl font-black text-green-600">SAR {stats.b2cCashRevenue.toLocaleString()}</span>
+                <div className="space-y-3 lg:space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 bg-slate-50 rounded-xl gap-2">
+                    <span className="text-sm lg:text-base text-slate-600 font-medium">Cash (Co Amount + VAT)</span>
+                    <span className="text-lg lg:text-xl font-black text-green-600">SAR {stats.b2cCashRevenue.toLocaleString()}</span>
                   </div>
-                  <div className="flex justify-between items-center p-4 bg-slate-50 rounded-xl">
-                    <span className="text-slate-600 font-medium">Insurance (Company Due Amount)</span>
-                    <span className="text-xl font-black text-green-600">SAR {stats.b2cInsuranceRevenue.toLocaleString()}</span>
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 bg-slate-50 rounded-xl gap-2">
+                    <span className="text-sm lg:text-base text-slate-600 font-medium">Insurance (Company Due Amount)</span>
+                    <span className="text-lg lg:text-xl font-black text-green-600">SAR {stats.b2cInsuranceRevenue.toLocaleString()}</span>
                   </div>
-                  <div className="flex justify-between items-center p-4 bg-green-50 rounded-xl border border-green-100">
-                    <span className="text-green-800 font-bold">Total B2C Revenue</span>
-                    <span className="text-xl font-black text-green-700">SAR {stats.b2cRevenue.toLocaleString()}</span>
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 bg-green-50 rounded-xl border border-green-100 gap-2">
+                    <span className="text-sm lg:text-base text-green-800 font-bold">Total B2C Revenue</span>
+                    <span className="text-lg lg:text-xl font-black text-green-700">SAR {stats.b2cRevenue.toLocaleString()}</span>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-12">
-              <div className="h-[500px]">
+            <div className="grid grid-cols-1 gap-8 lg:gap-12">
+              <div className="h-[350px] lg:h-[500px]">
                 <DashboardChart
                   title="Revenue Trends (B2B vs B2C)"
                   type="line"
@@ -497,7 +531,7 @@ export default function App() {
                   colors={["#3b82f6", "#10b981"]}
                 />
               </div>
-              <div className="h-[500px]">
+              <div className="h-[350px] lg:h-[500px]">
                 <DashboardChart
                   title="Revenue by Insurance Company"
                   type="stackedBar"
@@ -510,8 +544,8 @@ export default function App() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-12">
-              <div className="h-[500px]">
+            <div className="grid grid-cols-1 gap-8 lg:gap-12">
+              <div className="h-[350px] lg:h-[500px]">
                 <DashboardChart
                   title="Revenue by Clinic"
                   type="bar"
@@ -521,7 +555,7 @@ export default function App() {
                   dataKeys={["b2b", "b2c"]}
                 />
               </div>
-              <div className="h-[500px]">
+              <div className="h-[350px] lg:h-[500px]">
                 <DashboardChart
                   title="Revenue by Doctor (Top 10)"
                   type="bar"
@@ -537,8 +571,8 @@ export default function App() {
         )}
 
         {activeTab === "volume" && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-12">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 lg:space-y-12">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:gap-6">
               <KPICard
                 title="Total B2B Volume"
                 value={stats.b2bVolume.toLocaleString()}
@@ -551,7 +585,7 @@ export default function App() {
                 icon={<Users className="w-5 h-5" />}
                 className="border-l-4 border-l-green-500"
               />
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-center">
+              <div className="bg-white p-5 lg:p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-center">
                 <h3 className="text-sm font-semibold text-slate-900 mb-4">Patient Type Breakdown</h3>
                 <div className="h-32">
                   <DashboardChart
@@ -568,8 +602,8 @@ export default function App() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-12">
-              <div className="h-[500px]">
+            <div className="grid grid-cols-1 gap-8 lg:gap-12">
+              <div className="h-[350px] lg:h-[500px]">
                 <DashboardChart
                   title="Volume by Insurance"
                   type="stackedBar"
@@ -580,7 +614,7 @@ export default function App() {
                   dataKeys={["b2b", "b2c"]}
                 />
               </div>
-              <div className="h-[500px]">
+              <div className="h-[350px] lg:h-[500px]">
                 <DashboardChart
                   title="Volume by Clinic"
                   type="bar"
@@ -595,8 +629,8 @@ export default function App() {
         )}
 
         {activeTab === "cpp" && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-12">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 lg:space-y-12">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:gap-6">
               <KPICard
                 title="Average CPP (Overall)"
                 value={`SAR ${stats.cpp}`}
@@ -618,8 +652,8 @@ export default function App() {
               />
             </div>
 
-            <div className="grid grid-cols-1 gap-12">
-              <div className="h-[500px]">
+            <div className="grid grid-cols-1 gap-8 lg:gap-12">
+              <div className="h-[350px] lg:h-[500px]">
                 <DashboardChart
                   title="CPP per Clinic"
                   type="bar"
@@ -628,7 +662,7 @@ export default function App() {
                   colors={["#8b5cf6"]}
                 />
               </div>
-              <div className="h-[500px]">
+              <div className="h-[350px] lg:h-[500px]">
                 <DashboardChart
                   title="CPP per Doctor (Top 10)"
                   type="bar"
@@ -636,6 +670,50 @@ export default function App() {
                   dataKeys={["cpp"]}
                   colors={["#8b5cf6"]}
                 />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+              <div className="bg-white rounded-2xl p-5 lg:p-6 shadow-sm border border-slate-100">
+                <h3 className="text-base lg:text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                  <Building2 className="w-5 h-5 text-blue-600" />
+                  Detailed CPP by Clinic
+                </h3>
+                <div className="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
+                  {cppByClinic.map((c, i) => (
+                    <div key={c.name} className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors gap-2">
+                      <div className="flex items-start sm:items-center gap-3">
+                        <span className="text-sm font-bold text-slate-400 w-5 pt-0.5 sm:pt-0">{i + 1}.</span>
+                        <div>
+                          <p className="font-semibold text-slate-800 text-sm sm:text-base">{c.name}</p>
+                          <p className="text-xs text-slate-500">Vol: {c.volume} | Rev: SAR {c.revenue.toLocaleString()}</p>
+                        </div>
+                      </div>
+                      <span className="font-black text-base sm:text-lg text-purple-600 ml-8 sm:ml-0">SAR {c.cpp}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl p-5 lg:p-6 shadow-sm border border-slate-100">
+                <h3 className="text-base lg:text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                  <Stethoscope className="w-5 h-5 text-blue-600" />
+                  Detailed CPP by Doctor
+                </h3>
+                <div className="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
+                  {cppByDoctor.map((c, i) => (
+                    <div key={c.name} className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors gap-2">
+                      <div className="flex items-start sm:items-center gap-3">
+                        <span className="text-sm font-bold text-slate-400 w-5 pt-0.5 sm:pt-0">{i + 1}.</span>
+                        <div>
+                          <p className="font-semibold text-slate-800 text-sm sm:text-base">{c.name}</p>
+                          <p className="text-xs text-slate-500">Vol: {c.volume} | Rev: SAR {c.revenue.toLocaleString()}</p>
+                        </div>
+                      </div>
+                      <span className="font-black text-base sm:text-lg text-purple-600 ml-8 sm:ml-0">SAR {c.cpp}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </motion.div>
