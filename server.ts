@@ -18,10 +18,9 @@ const app = express();
 const PORT = parseInt(process.env.PORT || "3000", 10);
 
 app.use(cors());
-app.use(express.json({ limit: '500mb' })); // Increase limit for large JSON payloads
+app.use(express.json({ limit: '500mb' }));
 app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
-// We will use the environment variable directly
 let uri = process.env.MONGODB_URI;
 
 if (!uri) {
@@ -29,63 +28,46 @@ if (!uri) {
   process.exit(1);
 }
 
-// Fix common mistake where users leave < and > around the password in the connection string
 if (uri.includes("<") || uri.includes(">")) {
   console.log("Cleaning MONGODB_URI: removing < and > symbols.");
   uri = uri.replace(/<|>/g, "");
 }
 
-let client: MongoClient | null = null;
-let db: any = null;
+let client: MongoClient;
+let db: any;
 
 async function getDb() {
-  // If we have a live client, return the cached db
-  if (client && db) {
+  if (db) return db;
+  
+  let lastError;
+  for (let i = 0; i < 3; i++) {
     try {
-      // Ping to verify the connection is still alive
-      await client.db("admin").command({ ping: 1 });
+      const maskedUri = (uri as string).replace(/:([^@]+)@/, ":****@");
+      console.log(`Attempt ${i + 1} to connect to MongoDB with URI: ${maskedUri}`);
+      
+      client = new MongoClient(uri as string, {
+        connectTimeoutMS: 30000,
+        serverSelectionTimeoutMS: 30000,
+        socketTimeoutMS: 45000,
+        family: 4, // Force IPv4 to avoid resolution issues on some cloud platforms
+      });
+      
+      await client.connect();
+      console.log("Successfully connected to MongoDB!");
+      db = client.db("JMSRevenueAnalysis");
       return db;
-    } catch {
-      // Connection is dead — fall through to reconnect
-      console.log("MongoDB connection lost. Reconnecting...");
-      try { await client.close(); } catch {}
-      client = null;
-      db = null;
+    } catch (error: any) {
+      lastError = error;
+      console.error(`MongoDB connection attempt ${i + 1} failed:`, error.message);
+      if (i < 2) {
+        console.log("Retrying in 5 seconds...");
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      }
     }
   }
-
-  console.log("Initializing MongoClient with URI...");
-  client = new MongoClient(uri as string, {
-    serverApi: {
-      version: ServerApiVersion.v1,
-      strict: true,
-      deprecationErrors: true,
-    },
-    // Connection timeouts
-    connectTimeoutMS: 30000,
-    socketTimeoutMS: 60000,
-    serverSelectionTimeoutMS: 30000,
-    // Keep connections alive so Atlas Free Tier doesn't drop them silently
-    maxIdleTimeMS: 60000,      // close idle connections after 60s (before Atlas drops them)
-    // Connection pool — keep it small for Free Tier (max 500 total connections)
-    maxPoolSize: 5,
-    minPoolSize: 1,
-    // Retry failed operations automatically
-    retryWrites: true,
-    retryReads: true,
-  });
-
-  try {
-    await client.connect();
-    console.log("Successfully connected to MongoDB!");
-    db = client.db("JMSRevenueAnalysis");
-    return db;
-  } catch (error: any) {
-    console.error("MongoDB connection error:", error.message);
-    client = null;
-    db = null;
-    throw error;
-  }
+  
+  console.error("All MongoDB connection attempts failed.");
+  throw lastError;
 }
 
 async function connectToMongo() {
@@ -106,38 +88,28 @@ app.get("/api/data", async (req, res) => {
     const database = await getDb();
     const collection = database.collection("revenue_chunks");
     
-    // Ensure index exists to avoid blocking sort
     try {
       await collection.createIndex({ index: 1 });
     } catch (indexError) {
       console.warn("Could not create index on 'index' field:", indexError);
     }
     
-    console.log("Fetching data from MongoDB...");
-    // Use .allowDiskUse() on the cursor to prevent memory limit errors when sorting large datasets
     const cursor = collection.find({}).sort({ index: 1 }).allowDiskUse();
     const chunks = await cursor.toArray();
     
-    console.log(`Found ${chunks.length} chunks in database.`);
-
     if (chunks.length === 0) {
-      console.log("No data found in revenue_chunks collection.");
       return res.json({ data: null });
     }
 
-    // Reassemble chunks
     const allData = chunks.reduce((acc: any[], chunk: any) => {
       try {
         const parsed = typeof chunk.data === 'string' ? JSON.parse(chunk.data) : chunk.data;
         return acc.concat(parsed);
       } catch (e) {
-        console.error("Error parsing chunk data at index", chunk.index, ":", e);
         return acc;
       }
     }, []);
 
-    console.log(`Successfully reassembled ${allData.length} rows.`);
-    
     res.json({ data: allData });
   } catch (error: any) {
     console.error("Error fetching data:", error);
@@ -148,56 +120,16 @@ app.get("/api/data", async (req, res) => {
 app.post("/api/data/upload-chunk", async (req, res) => {
   try {
     const { chunk, index } = req.body;
-    
-    if (!chunk || !Array.isArray(chunk)) {
-      return res.status(400).json({ error: "Invalid chunk data" });
-    }
-
     const database = await getDb();
     const collection = database.collection("revenue_chunks");
-    
     await collection.insertOne({
       index,
       data: JSON.stringify(chunk),
       timestamp: new Date()
     });
-
-    res.json({ success: true, message: `Chunk ${index} uploaded successfully` });
+    res.json({ success: true });
   } catch (error) {
-    console.error("Error uploading chunk:", error);
     res.status(500).json({ error: "Failed to upload chunk" });
-  }
-});
-
-app.post("/api/data/upload", async (req, res) => {
-  try {
-    const { chunks } = req.body;
-    
-    if (!chunks || !Array.isArray(chunks)) {
-      return res.status(400).json({ error: "Invalid chunks data" });
-    }
-
-    const database = await getDb();
-    const collection = database.collection("revenue_chunks");
-    
-    // Clear existing data
-    await collection.deleteMany({});
-    
-    // Insert new chunks
-    if (chunks.length > 0) {
-      const documents = chunks.map((chunk, index) => ({
-        index,
-        data: JSON.stringify(chunk),
-        timestamp: new Date()
-      }));
-      
-      await collection.insertMany(documents);
-    }
-
-    res.json({ success: true, message: "Data uploaded successfully" });
-  } catch (error) {
-    console.error("Error uploading data:", error);
-    res.status(500).json({ error: "Failed to upload data" });
   }
 });
 
@@ -206,9 +138,8 @@ app.delete("/api/data/clear", async (req, res) => {
     const database = await getDb();
     const collection = database.collection("revenue_chunks");
     await collection.deleteMany({});
-    res.json({ success: true, message: "Data cleared successfully" });
+    res.json({ success: true });
   } catch (error) {
-    console.error("Error clearing data:", error);
     res.status(500).json({ error: "Failed to clear data" });
   }
 });
@@ -216,7 +147,6 @@ app.delete("/api/data/clear", async (req, res) => {
 async function startServer() {
   await connectToMongo();
 
-  // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
@@ -232,9 +162,7 @@ async function startServer() {
     });
   }
 
-  // Global error handler to ensure JSON responses
   app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-    console.error("Unhandled error:", err);
     res.status(err.status || 500).json({ error: err.message || "Internal Server Error" });
   });
 
